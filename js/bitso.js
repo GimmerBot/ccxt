@@ -29,6 +29,14 @@ module.exports = class bitso extends Exchange {
                 'fees': 'https://bitso.com/fees?l=es',
                 'referral': 'https://bitso.com/?ref=itej',
             },
+            'options': {
+                'precision': {
+                    'XRP': 6,
+                    'MXN': 2,
+                    'TUSD': 2,
+                },
+                'defaultPrecision': 8,
+            },
             'api': {
                 'public': {
                     'get': [
@@ -118,8 +126,8 @@ module.exports = class bitso extends Exchange {
                 },
             };
             const precision = {
-                'amount': this.precisionFromString (market['minimum_amount']),
-                'price': this.precisionFromString (market['minimum_price']),
+                'amount': this.safeInteger (this.options['precision'], base, this.options['defaultPrecision']),
+                'price': this.safeInteger (this.options['precision'], quote, this.options['defaultPrecision']),
             };
             result.push ({
                 'id': id,
@@ -536,12 +544,8 @@ module.exports = class bitso extends Exchange {
                     throw new ExchangeError (feedback);
                 }
                 const code = this.safeString (error, 'code');
-                const exceptions = this.exceptions;
-                if (code in exceptions) {
-                    throw new exceptions[code] (feedback);
-                } else {
-                    throw new ExchangeError (feedback);
-                }
+                this.throwExactlyMatchedException (this.exceptions, code, feedback);
+                throw new ExchangeError (feedback);
             }
         }
     }

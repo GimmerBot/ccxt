@@ -95,13 +95,14 @@ module.exports = class bitstamp extends Exchange {
                 'trading': {
                     'tierBased': true,
                     'percentage': true,
-                    'taker': 0.25 / 100,
-                    'maker': 0.25 / 100,
+                    'taker': 0.5 / 100,
+                    'maker': 0.5 / 100,
                     'tiers': {
                         'taker': [
-                            [0, 0.25 / 100],
-                            [20000, 0.24 / 100],
-                            [100000, 0.22 / 100],
+                            [0, 0.5 / 100],
+                            [20000, 0.25 / 100],
+                            [100000, 0.24 / 100],
+                            [200000, 0.22 / 100],
                             [400000, 0.20 / 100],
                             [600000, 0.15 / 100],
                             [1000000, 0.14 / 100],
@@ -111,9 +112,10 @@ module.exports = class bitstamp extends Exchange {
                             [20000001, 0.10 / 100],
                         ],
                         'maker': [
-                            [0, 0.25 / 100],
-                            [20000, 0.24 / 100],
-                            [100000, 0.22 / 100],
+                            [0, 0.5 / 100],
+                            [20000, 0.25 / 100],
+                            [100000, 0.24 / 100],
+                            [200000, 0.22 / 100],
                             [400000, 0.20 / 100],
                             [600000, 0.15 / 100],
                             [1000000, 0.14 / 100],
@@ -1128,18 +1130,11 @@ module.exports = class bitstamp extends Exchange {
             if (code === 'API0005') {
                 throw new AuthenticationError (this.id + ' invalid signature, use the uid for the main account if you have subaccounts');
             }
-            const exact = this.exceptions['exact'];
-            const broad = this.exceptions['broad'];
             const feedback = this.id + ' ' + body;
             for (let i = 0; i < errors.length; i++) {
                 const value = errors[i];
-                if (value in exact) {
-                    throw new exact[value] (feedback);
-                }
-                const broadKey = this.findBroadlyMatchedKey (broad, value);
-                if (broadKey !== undefined) {
-                    throw new broad[broadKey] (feedback);
-                }
+                this.throwExactlyMatchedException (this.exceptions['exact'], value, feedback);
+                this.throwBroadlyMatchedException (this.exceptions['broad'], value, feedback);
             }
             throw new ExchangeError (feedback);
         }

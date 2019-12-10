@@ -4,7 +4,7 @@
 
 # -----------------------------------------------------------------------------
 
-__version__ = '1.18.1205'
+__version__ = '1.20.66'
 
 # -----------------------------------------------------------------------------
 
@@ -39,7 +39,6 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from ccxt.static_dependencies import ecdsa
 
 # -----------------------------------------------------------------------------
-
 
 __all__ = [
     'Exchange',
@@ -316,7 +315,7 @@ class Exchange(object):
         self.balance = dict() if self.balance is None else self.balance
         self.orderbooks = dict() if self.orderbooks is None else self.orderbooks
         self.orders = dict() if self.orders is None else self.orders
-        self.trades = dict() if self.trades is None else self.trades
+        self.trades = list() if self.trades is None else self.trades
         self.transactions = dict() if self.transactions is None else self.transactions
         self.currencies = dict() if self.currencies is None else self.currencies
         self.options = dict() if self.options is None else self.options  # Python does not allow to define properties in run-time with setattr
@@ -364,7 +363,7 @@ class Exchange(object):
             'defaultCost': 1.0,
         }, getattr(self, 'tokenBucket') if hasattr(self, 'tokenBucket') else {})
 
-        self.session = self.session if self.session else Session()
+        self.session = self.session if self.session or self.asyncio_loop else Session()
         self.logger = self.logger if self.logger else logging.getLogger(__name__)
 
         if self.requiresWeb3 and Web3 and not self.web3:
@@ -468,6 +467,15 @@ class Exchange(object):
                 return gzip.GzipFile('', 'rb', 9, io.BytesIO(text)).read()
         return text
 
+    def throw_exactly_matched_exception(self, exact, string, message):
+        if string in exact:
+            raise exact[string](message)
+
+    def throw_broadly_matched_exception(self, broad, string, message):
+        broad_key = self.find_broadly_matched_key(broad, string)
+        if broad_key is not None:
+            raise broad[broad_key](message)
+
     def find_broadly_matched_key(self, broad, string):
         """A helper method for matching error strings exactly vs broadly"""
         keys = list(broad.keys())
@@ -564,7 +572,9 @@ class Exchange(object):
         self.handle_rest_response(http_response, json_response, url, method)
         if json_response is not None:
             return json_response
-        return http_response
+        if self.is_text_response(headers):
+            return http_response
+        return response.content
 
     def handle_rest_errors(self, http_status_code, http_status_text, body, url, method):
         error = None
@@ -594,6 +604,10 @@ class Exchange(object):
                 return json.loads(http_response)
         except ValueError:  # superclass of JsonDecodeError (python2)
             pass
+
+    def is_text_response(self, headers):
+        content_type = headers.get('Content-Type', '')
+        return content_type.startswith('application/json') or content_type.startswith('text/')
 
     @staticmethod
     def key_exists(dictionary, key):
@@ -767,12 +781,8 @@ class Exchange(object):
 
     @staticmethod
     def filter_by(array, key, value=None):
-        if value:
-            grouped = Exchange.group_by(array, key)
-            if value in grouped:
-                return grouped[value]
-            return []
-        return array
+        array = Exchange.to_array(array)
+        return list(filter(lambda x: x[key] == value, array))
 
     @staticmethod
     def filterBy(array, key, value=None):
@@ -833,18 +843,11 @@ class Exchange(object):
         return string
 
     @staticmethod
-    def url(path, params={}):
-        result = Exchange.implode_params(path, params)
-        query = Exchange.omit(params, Exchange.extract_params(path))
-        if query:
-            result += '?' + _urlencode.urlencode(query)
-        return result
-
-    @staticmethod
     def urlencode(params={}):
-        if (type(params) is dict) or isinstance(params, collections.OrderedDict):
-            return _urlencode.urlencode(params)
-        return params
+        for key, value in params.items():
+            if isinstance(value, bool):
+                params[key] = 'true' if value else 'false'
+        return _urlencode.urlencode(params)
 
     @staticmethod
     def rawencode(params={}):
@@ -1029,6 +1032,13 @@ class Exchange(object):
         return result
 
     @staticmethod
+    def binary_concat_array(array):
+        result = bytes()
+        for element in array:
+            result = result + element
+        return result
+
+    @staticmethod
     def base64urlencode(s):
         return Exchange.decode(base64.urlsafe_b64encode(s)).replace('=', '')
 
@@ -1069,7 +1079,8 @@ class Exchange(object):
         return priv_key.sign(Exchange.encode(request), padding.PKCS1v15(), algorithm)
 
     @staticmethod
-    def ecdsa(request, secret, algorithm='p256', hash=None):
+    def ecdsa(request, secret, algorithm='p256', hash=None, fixed_length=False):
+        # your welcome - frosty00
         algorithms = {
             'p192': [ecdsa.NIST192p, 'sha256'],
             'p224': [ecdsa.NIST224p, 'sha256'],
@@ -1087,8 +1098,20 @@ class Exchange(object):
             digest = Exchange.hash(encoded_request, hash, 'binary')
         else:
             digest = base64.b16decode(encoded_request, casefold=True)
-        key = ecdsa.SigningKey.from_string(base64.b16decode(Exchange.encode(secret), casefold=True), curve=curve_info[0])
-        r_binary, s_binary, v = key.sign_digest_deterministic(digest, hashfunc=hash_function, sigencode=ecdsa.util.sigencode_strings_canonize)
+        key = ecdsa.SigningKey.from_string(base64.b16decode(Exchange.encode(secret),
+                                                            casefold=True), curve=curve_info[0])
+        r_binary, s_binary, v = key.sign_digest_deterministic(digest, hashfunc=hash_function,
+                                                              sigencode=ecdsa.util.sigencode_strings_canonize)
+        r_int, s_int = ecdsa.util.sigdecode_strings((r_binary, s_binary), key.privkey.order)
+        counter = 0
+        minimum_size = (1 << (8 * 31)) - 1
+        half_order = key.privkey.order / 2
+        while fixed_length and (r_int > half_order or r_int <= minimum_size or s_int <= minimum_size):
+            r_binary, s_binary, v = key.sign_digest_deterministic(digest, hashfunc=hash_function,
+                                                                  sigencode=ecdsa.util.sigencode_strings_canonize,
+                                                                  extra_entropy=Exchange.numberToLE(counter, 32))
+            r_int, s_int = ecdsa.util.sigdecode_strings((r_binary, s_binary), key.privkey.order)
+            counter += 1
         r, s = Exchange.decode(base64.b16encode(r_binary)).lower(), Exchange.decode(base64.b16encode(s_binary)).lower()
         return {
             'r': r,
@@ -1133,6 +1156,7 @@ class Exchange(object):
                     raise AuthenticationError('requires `' + key + '`')
                 else:
                     return error
+        return True
 
     def check_address(self, address):
         """Checks an address is not the same character repeated or an empty sequence"""
@@ -1533,18 +1557,22 @@ class Exchange(object):
     def parse_timeframe(timeframe):
         amount = int(timeframe[0:-1])
         unit = timeframe[-1]
-        if 'y' in unit:
+        if 'y' == unit:
             scale = 60 * 60 * 24 * 365
-        elif 'M' in unit:
+        elif 'M' == unit:
             scale = 60 * 60 * 24 * 30
-        elif 'w' in unit:
+        elif 'w' == unit:
             scale = 60 * 60 * 24 * 7
-        elif 'd' in unit:
+        elif 'd' == unit:
             scale = 60 * 60 * 24
-        elif 'h' in unit:
+        elif 'h' == unit:
             scale = 60 * 60
+        elif 'm' == unit:
+            scale = 60
+        elif 's' == unit:
+            scale = 1
         else:
-            scale = 60  # 1m by default
+            raise NotSupported('timeframe unit {} is not supported'.format(unit))
         return amount * scale
 
     @staticmethod
@@ -1651,23 +1679,6 @@ class Exchange(object):
         if isinstance(code, basestring) and (code in self.currencies):
             return self.currencies[code]
         raise ExchangeError('Does not have currency code ' + str(code))
-
-    def find_market(self, string):
-        if not self.markets:
-            raise ExchangeError('Markets not loaded')
-        if isinstance(string, basestring):
-            if string in self.markets_by_id:
-                return self.markets_by_id[string]
-            if string in self.markets:
-                return self.markets[string]
-        return string
-
-    def find_symbol(self, string, market=None):
-        if market is None:
-            market = self.find_market(string)
-        if isinstance(market, dict):
-            return market['symbol']
-        return string
 
     def market(self, symbol):
         if not self.markets:
@@ -2016,8 +2027,8 @@ class Exchange(object):
     def decimal_to_bytes(n, endian='big'):
         """int.from_bytes and int.to_bytes don't work in python2"""
         if n > 0:
-            next_byte = Exchange.decimal_to_bytes(n // 256, endian)
-            remainder = bytes([n % 256])
+            next_byte = Exchange.decimal_to_bytes(n // 0x100, endian)
+            remainder = bytes([n % 0x100])
             return next_byte + remainder if endian == 'big' else remainder + next_byte
         else:
             return b''
@@ -2038,3 +2049,28 @@ class Exchange(object):
         offset = hex_to_dec(hmac_res[-1]) * 2
         otp = str(hex_to_dec(hmac_res[offset: offset + 8]) & 0x7fffffff)
         return otp[-6:]
+
+    @staticmethod
+    def numberToLE(n, size):
+        return Exchange.decimal_to_bytes(int(n), 'little').ljust(size, b'\x00')
+
+    @staticmethod
+    def numberToBE(n, size):
+        return Exchange.decimal_to_bytes(int(n), 'big').rjust(size, b'\x00')
+
+    @staticmethod
+    def base16_to_binary(s):
+        return base64.b16decode(s, True)
+
+    # python supports arbitrarily big integers
+    @staticmethod
+    def integer_divide(a, b):
+        return int(a) // int(b)
+
+    @staticmethod
+    def integer_pow(a, b):
+        return int(a) ** int(b)
+
+    @staticmethod
+    def integer_modulo(a, b):
+        return int(a) % int(b)

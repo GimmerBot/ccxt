@@ -6,7 +6,7 @@
 from ccxt.async_support.okcoinusd import okcoinusd
 
 
-class allcoin (okcoinusd):
+class allcoin(okcoinusd):
 
     def describe(self):
         return self.deep_extend(super(allcoin, self).describe(), {
@@ -107,10 +107,7 @@ class allcoin (okcoinusd):
                             'min': self.safe_float(market, 'MinOrderPrice'),
                             'max': self.safe_float(market, 'MaxOrderPrice'),
                         },
-                        'cost': {
-                            'min': None,
-                            'max': None,
-                        },
+                        'cost': {'min': None, 'max': None},
                     },
                     'info': market,
                 })

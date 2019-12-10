@@ -95,6 +95,7 @@ module.exports = class yobit extends Exchange {
                 'CPC': 'Capricoin',
                 'CS': 'CryptoSpots',
                 'DCT': 'Discount',
+                'DFT': 'DraftCoin',
                 'DGD': 'DarkGoldCoin',
                 'DIRT': 'DIRTY',
                 'DROP': 'FaucetCoin',
@@ -102,7 +103,6 @@ module.exports = class yobit extends Exchange {
                 'EKO': 'EkoCoin',
                 'ENTER': 'ENTRC',
                 'EPC': 'ExperienceCoin',
-                'ERT': 'Eristica Token',
                 'ESC': 'EdwardSnowden',
                 'EUROPE': 'EUROP',
                 'EXT': 'LifeExtension',
@@ -141,6 +141,7 @@ module.exports = class yobit extends Exchange {
                 'RCN': 'RCoin',
                 'REP': 'Republicoin',
                 'RUR': 'RUB',
+                'TTC': 'TittieCoin',
                 'XIN': 'XINCoin',
             },
             'options': {
@@ -910,18 +911,10 @@ module.exports = class yobit extends Exchange {
             if (!success) {
                 const code = this.safeString (response, 'code');
                 const message = this.safeString (response, 'error');
-                const feedback = this.id + ' ' + this.json (response);
-                const exact = this.exceptions['exact'];
-                if (code in exact) {
-                    throw new exact[code] (feedback);
-                } else if (message in exact) {
-                    throw new exact[message] (feedback);
-                }
-                const broad = this.exceptions['broad'];
-                const broadKey = this.findBroadlyMatchedKey (broad, message);
-                if (broadKey !== undefined) {
-                    throw new broad[broadKey] (feedback);
-                }
+                const feedback = this.id + ' ' + body;
+                this.throwExactlyMatchedException (this.exceptions['exact'], code, feedback);
+                this.throwExactlyMatchedException (this.exceptions['exact'], message, feedback);
+                this.throwBroadlyMatchedException (this.exceptions['broad'], message, feedback);
                 throw new ExchangeError (feedback); // unknown message
             }
         }

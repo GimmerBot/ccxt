@@ -17,7 +17,7 @@ from ccxt.base.errors import OrderNotFound
 from ccxt.base.errors import InvalidNonce
 
 
-class bitso (Exchange):
+class bitso(Exchange):
 
     def describe(self):
         return self.deep_extend(super(bitso, self).describe(), {
@@ -39,6 +39,14 @@ class bitso (Exchange):
                 'doc': 'https://bitso.com/api_info',
                 'fees': 'https://bitso.com/fees?l=es',
                 'referral': 'https://bitso.com/?ref=itej',
+            },
+            'options': {
+                'precision': {
+                    'XRP': 6,
+                    'MXN': 2,
+                    'TUSD': 2,
+                },
+                'defaultPrecision': 8,
             },
             'api': {
                 'public': {
@@ -128,8 +136,8 @@ class bitso (Exchange):
                 },
             }
             precision = {
-                'amount': self.precision_from_string(market['minimum_amount']),
-                'price': self.precision_from_string(market['minimum_price']),
+                'amount': self.safe_integer(self.options['precision'], base, self.options['defaultPrecision']),
+                'price': self.safe_integer(self.options['precision'], quote, self.options['defaultPrecision']),
             }
             result.append({
                 'id': id,
@@ -267,7 +275,7 @@ class bitso (Exchange):
         # the don't support fetching trades starting from a date yet
         # use the `marker` extra param for that
         # self is not a typo, the variable name is 'marker'(don't confuse with 'market')
-        markerInParams = ('marker' in list(params.keys()))
+        markerInParams = ('marker' in params)
         # warn the user with an exception if the user wants to filter
         # starting from since timestamp, but does not set the trade id with an extra 'marker' param
         if (since is not None) and not markerInParams:
@@ -367,7 +375,7 @@ class bitso (Exchange):
         # the don't support fetching trades starting from a date yet
         # use the `marker` extra param for that
         # self is not a typo, the variable name is 'marker'(don't confuse with 'market')
-        markerInParams = ('marker' in list(params.keys()))
+        markerInParams = ('marker' in params)
         # warn the user with an exception if the user wants to filter
         # starting from since timestamp, but does not set the trade id with an extra 'marker' param
         if (since is not None) and not markerInParams:
@@ -439,7 +447,7 @@ class bitso (Exchange):
             'BCH': 'Bcash',
             'LTC': 'Litecoin',
         }
-        method = methods[code] if (code in list(methods.keys())) else None
+        method = methods[code] if (code in methods) else None
         if method is None:
             raise ExchangeError(self.id + ' not valid withdraw coin: ' + code)
         request = {
@@ -496,11 +504,8 @@ class bitso (Exchange):
                 if error is None:
                     raise ExchangeError(feedback)
                 code = self.safe_string(error, 'code')
-                exceptions = self.exceptions
-                if code in exceptions:
-                    raise exceptions[code](feedback)
-                else:
-                    raise ExchangeError(feedback)
+                self.throw_exactly_matched_exception(self.exceptions, code, feedback)
+                raise ExchangeError(feedback)
 
     def request(self, path, api='public', method='GET', params={}, headers=None, body=None):
         response = self.fetch2(path, api, method, params, headers, body)

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-const { ExchangeError, InsufficientFunds, OrderNotFound, InvalidOrder } = require ('./base/errors');
+const { BadSymbol, ExchangeError, InsufficientFunds, OrderNotFound, InvalidOrder } = require ('./base/errors');
 
 // ---------------------------------------------------------------------------
 
@@ -486,6 +486,7 @@ module.exports = class hitbtc extends Exchange {
             'commonCurrencies': {
                 'BET': 'DAO.Casino',
                 'CAT': 'BitClave',
+                'CPT': 'Cryptaur', // conflict with CPT = Contents Protocol https://github.com/ccxt/ccxt/issues/4920 and https://github.com/ccxt/ccxt/issues/6081
                 'DRK': 'DASH',
                 'EMGO': 'MGO',
                 'GET': 'Themis',
@@ -494,6 +495,13 @@ module.exports = class hitbtc extends Exchange {
                 'UNC': 'Unigame',
                 'USD': 'USDT',
                 'XBT': 'BTC',
+            },
+            'exceptions': {
+                'exact': {
+                    '2001': BadSymbol, // {"error":{"code":2001,"message":"Symbol not found","description":"Try get /api/2/public/symbol, to get list of all available symbols."}}
+                },
+                'broad': {
+                },
             },
             'options': {
                 'defaultTimeInForce': 'FOK',
@@ -1009,5 +1017,19 @@ module.exports = class hitbtc extends Exchange {
             throw new ExchangeError (this.id + ' ' + this.json (response));
         }
         return response;
+    }
+
+    handleErrors (httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody) {
+        if (!response) {
+            return; // fallback to default error handler
+        }
+        const error = this.safeValue (response, 'error');
+        if (error) {
+            const code = this.safeValue (error, 'code');
+            const feedback = this.id + ' ' + body;
+            this.throwExactlyMatchedException (this.exceptions['exact'], code, feedback);
+            this.throwBroadlyMatchedException (this.exceptions['broad'], error, feedback);
+            throw new ExchangeError (feedback); // unknown error
+        }
     }
 };

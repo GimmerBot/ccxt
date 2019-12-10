@@ -13,7 +13,7 @@ from ccxt.base.errors import OrderNotFound
 from ccxt.base.errors import InvalidNonce
 
 
-class cobinhood (Exchange):
+class cobinhood(Exchange):
 
     def describe(self):
         return self.deep_extend(super(cobinhood, self).describe(), {
@@ -651,7 +651,7 @@ class cobinhood (Exchange):
         #                                            created_at:  1536768050235,
         #                                              currency: "EOS",
         #                                                  memo: "12345678",
-        #                                                  type: "exchange"      }]} }
+        #                                                  type: "exchange"      }]}}
         #
         addresses = self.safe_value(response['result'], 'deposit_addresses', [])
         address = None
@@ -692,7 +692,7 @@ class cobinhood (Exchange):
             'currency': currency['id'],
         }
         response = self.privateGetWalletDeposits(self.extend(request, params))
-        return self.parseTransactions(response['result']['deposits'], currency)
+        return self.parse_transactions(response['result']['deposits'], currency)
 
     def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
         self.load_markets()
@@ -703,7 +703,7 @@ class cobinhood (Exchange):
             'currency': currency['id'],
         }
         response = self.privateGetWalletWithdrawals(self.extend(request, params))
-        return self.parseTransactions(response['result']['withdrawals'], currency)
+        return self.parse_transactions(response['result']['withdrawals'], currency)
 
     def parse_transaction_status(self, status):
         statuses = {
@@ -791,9 +791,7 @@ class cobinhood (Exchange):
                     # Cobinhood returns vague "parameter_error" on fetchOrder() and cancelOrder() calls
                     # for invalid order IDs as well as orders that are not "open"
                     raise InvalidOrder(feedback)
-        exceptions = self.exceptions
-        if errorCode in exceptions:
-            raise exceptions[errorCode](feedback)
+        self.throw_exactly_matched_exception(self.exceptions, errorCode, feedback)
         raise ExchangeError(feedback)
 
     def nonce(self):

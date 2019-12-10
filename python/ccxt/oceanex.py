@@ -14,7 +14,7 @@ from ccxt.base.errors import InvalidOrder
 from ccxt.base.errors import OrderNotFound
 
 
-class oceanex (Exchange):
+class oceanex(Exchange):
 
     def describe(self):
         return self.deep_extend(super(oceanex, self).describe(), {
@@ -158,7 +158,7 @@ class oceanex (Exchange):
                 },
                 'limits': {
                     'amount': {
-                        'min': self.safe_value(market, 'minimum_trading_amount'),
+                        'min': None,
                         'max': None,
                     },
                     'price': {
@@ -166,7 +166,7 @@ class oceanex (Exchange):
                         'max': None,
                     },
                     'cost': {
-                        'min': None,
+                        'min': self.safe_value(market, 'minimum_trading_amount'),
                         'max': None,
                     },
                 },
@@ -629,10 +629,6 @@ class oceanex (Exchange):
         message = self.safe_string(response, 'message')
         if (errorCode is not None) and (errorCode != '0'):
             feedback = self.id + ' ' + body
-            codes = self.exceptions['codes']
-            exact = self.exceptions['exact']
-            if errorCode in codes:
-                raise codes[errorCode](feedback)
-            if message in exact:
-                raise exact[message](feedback)
+            self.throw_exactly_matched_exception(self.exceptions['codes'], errorCode, feedback)
+            self.throw_exactly_matched_exception(self.exceptions['exact'], message, feedback)
             raise ExchangeError(response)

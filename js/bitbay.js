@@ -287,16 +287,19 @@ module.exports = class bitbay extends Exchange {
             'remaining': remaining,
             'average': undefined,
             'fee': undefined,
+            'trades': undefined,
         };
     }
 
     async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
-        const markets = symbol ? [ this.marketId (symbol) ] : [];
-        const request = {
-            'markets': markets,
-        };
-        const response = await this.v1_01PrivateGetTradingHistoryTransactions (this.extend ({ 'query': this.json (request) }, params));
+        const request = {};
+        if (symbol) {
+            const markets = [ this.marketId (symbol) ];
+            request['markets'] = markets;
+        }
+        const query = { 'query': this.json (this.extend (request, params)) };
+        const response = await this.v1_01PrivateGetTradingHistoryTransactions (query);
         //
         //     {
         //         status: 'Ok',
@@ -740,15 +743,16 @@ module.exports = class bitbay extends Exchange {
         return this.safeString (types, type, type);
     }
 
-    parseTrade (trade, market) {
-        if ('tid' in trade) {
-            return this.parsePublicTrade (trade, market);
-        } else {
-            return this.parseMyTrade (trade, market);
-        }
-    }
-
-    parseMyTrade (trade, market = undefined) {
+    parseTrade (trade, market = undefined) {
+        //
+        // createOrder trades
+        //
+        //     {
+        //         "rate": "0.02195928",
+        //         "amount": "0.00167952"
+        //     }
+        //
+        // fetchMyTrades (private)
         //
         //     {
         //         amount: "0.29285199",
@@ -763,13 +767,26 @@ module.exports = class bitbay extends Exchange {
         //         wasTaker: true,
         //     }
         //
-        const timestamp = this.safeInteger (trade, 'time');
+        // fetchTrades (public)
+        //
+        //     {
+        //          id: 'df00b0da-e5e0-11e9-8c19-0242ac11000a',
+        //          t: '1570108958831',
+        //          a: '0.04776653',
+        //          r: '0.02145854',
+        //          ty: 'Sell'
+        //     }
+        //
+        const timestamp = this.safeInteger2 (trade, 'time', 't');
         const userAction = this.safeString (trade, 'userAction');
         const side = (userAction === 'Buy') ? 'buy' : 'sell';
         const wasTaker = this.safeValue (trade, 'wasTaker');
-        const takerOrMaker = wasTaker ? 'taker' : 'maker';
-        const price = this.safeFloat (trade, 'rate');
-        const amount = this.safeFloat (trade, 'amount');
+        let takerOrMaker = undefined;
+        if (wasTaker !== undefined) {
+            takerOrMaker = wasTaker ? 'taker' : 'maker';
+        }
+        const price = this.safeFloat2 (trade, 'rate', 'r');
+        const amount = this.safeFloat2 (trade, 'amount', 'a');
         let cost = undefined;
         if (amount !== undefined) {
             if (price !== undefined) {
@@ -779,16 +796,18 @@ module.exports = class bitbay extends Exchange {
         const feeCost = this.safeFloat (trade, 'commissionValue');
         const marketId = this.safeString (trade, 'market');
         let base = undefined;
+        let quote = undefined;
         let symbol = undefined;
         if (marketId !== undefined) {
             if (marketId in this.markets_by_id) {
                 market = this.markets_by_id[marketId];
                 symbol = market['symbol'];
                 base = market['base'];
+                quote = market['quote'];
             } else {
                 const [ baseId, quoteId ] = marketId.split ('-');
                 base = this.safeCurrencyCode (baseId);
-                const quote = this.safeCurrencyCode (quoteId);
+                quote = this.safeCurrencyCode (quoteId);
                 symbol = base + '/' + quote;
             }
         }
@@ -802,14 +821,18 @@ module.exports = class bitbay extends Exchange {
         }
         let fee = undefined;
         if (feeCost !== undefined) {
+            const feeCcy = (side === 'buy') ? base : quote;
             fee = {
-                'currency': base,
+                'currency': feeCcy,
                 'cost': feeCost,
             };
         }
         const order = this.safeString (trade, 'offerId');
         // todo: check this logic
-        const type = order ? 'limit' : 'market';
+        let type = undefined;
+        if (order !== undefined) {
+            type = order ? 'limit' : 'market';
+        }
         return {
             'id': this.safeString (trade, 'id'),
             'order': order,
@@ -827,82 +850,22 @@ module.exports = class bitbay extends Exchange {
         };
     }
 
-    parsePublicTrade (trade, market = undefined) {
-        //
-        //     {
-        //         "date":1459608665,
-        //         "price":0.02722571,
-        //         "type":"sell",
-        //         "amount":1.08112001,
-        //         "tid":"0"
-        //     }
-        //
-        const timestamp = this.safeTimestamp (trade, 'date');
-        const id = this.safeString (trade, 'tid');
-        const type = undefined;
-        const side = this.safeString (trade, 'type');
-        const price = this.safeFloat (trade, 'price');
-        const amount = this.safeFloat (trade, 'amount');
-        let cost = undefined;
-        if (amount !== undefined) {
-            if (price !== undefined) {
-                cost = price * amount;
-            }
-        }
-        let symbol = undefined;
-        if (market !== undefined) {
-            symbol = market['symbol'];
-        }
-        return {
-            'id': id,
-            'info': trade,
-            'timestamp': timestamp,
-            'datetime': this.iso8601 (timestamp),
-            'symbol': symbol,
-            'type': type,
-            'side': side,
-            'order': undefined,
-            'takerOrMaker': undefined,
-            'price': price,
-            'amount': amount,
-            'cost': cost,
-            'fee': undefined,
-        };
-    }
-
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
+        const tradingSymbol = market['baseId'] + '-' + market['quoteId'];
         const request = {
-            'id': market['id'],
+            'symbol': tradingSymbol,
         };
-        const response = await this.publicGetIdTrades (this.extend (request, params));
-        //
-        //     [
-        //         {
-        //             "date":1459608665,
-        //             "price":0.02722571,
-        //             "type":"sell",
-        //             "amount":1.08112001,
-        //             "tid":"0"
-        //         },
-        //         {
-        //             "date":1459698930,
-        //             "price":0.029,
-        //             "type":"buy",
-        //             "amount":0.444188,
-        //             "tid":"1"
-        //         },
-        //         {
-        //             "date":1459726670,
-        //             "price":0.029,
-        //             "type":"buy",
-        //             "amount":0.25459599,
-        //             "tid":"2"
-        //         }
-        //     ]
-        //
-        return this.parseTrades (response, market, since, limit);
+        if (since !== undefined) {
+            request['fromTime'] = since - 1; // result does not include exactly `since` time therefore decrease by 1
+        }
+        if (limit !== undefined) {
+            request['limit'] = limit; // default - 10, max - 300
+        }
+        const response = await this.v1_01PublicGetTradingTransactionsSymbol (this.extend (request, params));
+        const items = this.safeValue (response, 'items');
+        return this.parseTrades (items, symbol, since, limit);
     }
 
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
@@ -918,16 +881,103 @@ module.exports = class bitbay extends Exchange {
         if (type === 'limit') {
             request['rate'] = price;
         }
+        const response = await this.v1_01PrivatePostTradingOfferSymbol (this.extend (request, params));
+        //
+        // unfilled (open order)
+        //
         //     {
         //         status: 'Ok',
         //         completed: false, // can deduce status from here
         //         offerId: 'ce9cc72e-d61c-11e9-9248-0242ac110005',
         //         transactions: [], // can deduce order info from here
         //     }
-        const response = await this.v1_01PrivatePostTradingOfferSymbol (this.extend (request, params));
+        //
+        // filled (closed order)
+        //
+        //     {
+        //         "status": "Ok",
+        //         "offerId": "942a4a3e-e922-11e9-8c19-0242ac11000a",
+        //         "completed": true,
+        //         "transactions": [
+        //           {
+        //             "rate": "0.02195928",
+        //             "amount": "0.00167952"
+        //           },
+        //           {
+        //             "rate": "0.02195928",
+        //             "amount": "0.00167952"
+        //           },
+        //           {
+        //             "rate": "0.02196207",
+        //             "amount": "0.27704177"
+        //           }
+        //         ]
+        //     }
+        //
+        // partially-filled (open order)
+        //
+        //     {
+        //         "status": "Ok",
+        //         "offerId": "d0ebefab-f4d7-11e9-8c19-0242ac11000a",
+        //         "completed": false,
+        //         "transactions": [
+        //           {
+        //             "rate": "0.02106404",
+        //             "amount": "0.0019625"
+        //           },
+        //           {
+        //             "rate": "0.02106404",
+        //             "amount": "0.0019625"
+        //           },
+        //           {
+        //             "rate": "0.02105901",
+        //             "amount": "0.00975256"
+        //           }
+        //         ]
+        //     }
+        //
+        const timestamp = this.milliseconds (); // the real timestamp is missing in the response
+        const id = this.safeString (response, 'offerId');
+        const completed = this.safeValue (response, 'completed', false);
+        const status = completed ? 'closed' : 'open';
+        let filled = 0;
+        let cost = undefined;
+        const transactions = this.safeValue (response, 'transactions');
+        let trades = undefined;
+        if (transactions !== undefined) {
+            trades = this.parseTrades (transactions, market, undefined, undefined, {
+                'timestamp': timestamp,
+                'datetime': this.iso8601 (timestamp),
+                'symbol': symbol,
+                'side': side,
+                'type': type,
+                'orderId': id,
+            });
+            cost = 0;
+            for (let i = 0; i < trades.length; i++) {
+                filled = this.sum (filled, trades[i]['amount']);
+                cost = this.sum (cost, trades[i]['cost']);
+            }
+        }
+        const remaining = amount - filled;
         return {
-            'id': this.safeString (response, 'offerId'),
+            'id': id,
             'info': response,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'lastTradeTimestamp': undefined,
+            'status': status,
+            'symbol': symbol,
+            'type': type,
+            'side': side,
+            'price': parseFloat (price),
+            'amount': parseFloat (amount),
+            'cost': cost,
+            'filled': filled,
+            'remaining': remaining,
+            'average': undefined,
+            'fee': undefined,
+            'trades': trades,
         };
     }
 
@@ -1009,7 +1059,7 @@ module.exports = class bitbay extends Exchange {
             this.checkRequiredCredentials ();
             const query = this.omit (params, this.extractParams (path));
             url += '/' + this.implodeParams (path, params);
-            const nonce = this.milliseconds ();
+            const nonce = this.milliseconds ().toString ();
             let payload = undefined;
             if (method !== 'POST') {
                 if (Object.keys (query).length) {
@@ -1074,12 +1124,8 @@ module.exports = class bitbay extends Exchange {
             //
             const code = this.safeString (response, 'code'); // always an integer
             const feedback = this.id + ' ' + body;
-            const exceptions = this.exceptions;
-            if (code in this.exceptions) {
-                throw new exceptions[code] (feedback);
-            } else {
-                throw new ExchangeError (feedback);
-            }
+            this.throwExactlyMatchedException (this.exceptions, code, feedback);
+            throw new ExchangeError (feedback);
         } else if ('status' in response) {
             //
             //      {"status":"Fail","errors":["OFFER_FUNDS_NOT_EXCEEDING_MINIMUMS"]}
@@ -1087,12 +1133,10 @@ module.exports = class bitbay extends Exchange {
             const status = this.safeString (response, 'status');
             if (status === 'Fail') {
                 const errors = this.safeValue (response, 'errors');
-                const feedback = this.id + ' ' + this.json (response);
+                const feedback = this.id + ' ' + body;
                 for (let i = 0; i < errors.length; i++) {
                     const error = errors[i];
-                    if (error in this.exceptions) {
-                        throw new this.exceptions[error] (feedback);
-                    }
+                    this.throwExactlyMatchedException (this.exceptions, error, feedback);
                 }
                 throw new ExchangeError (feedback);
             }

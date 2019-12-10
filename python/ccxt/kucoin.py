@@ -21,7 +21,7 @@ from ccxt.base.errors import ExchangeNotAvailable
 from ccxt.base.errors import InvalidNonce
 
 
-class kucoin (Exchange):
+class kucoin(Exchange):
 
     def describe(self):
         return self.deep_extend(super(kucoin, self).describe(), {
@@ -142,6 +142,7 @@ class kucoin (Exchange):
                 '1w': '1week',
             },
             'exceptions': {
+                'order not exist': OrderNotFound,
                 'order_not_exist': OrderNotFound,  # {"code":"order_not_exist","msg":"order_not_exist"} ¯\_(ツ)_/¯
                 'order_not_exist_or_not_allow_to_cancel': InvalidOrder,  # {"code":"400100","msg":"order_not_exist_or_not_allow_to_cancel"}
                 'Order size below the minimum requirement.': InvalidOrder,  # {"code":"400100","msg":"Order size below the minimum requirement."}
@@ -155,7 +156,7 @@ class kucoin (Exchange):
                 '500': ExchangeError,
                 '503': ExchangeNotAvailable,
                 '200004': InsufficientFunds,
-                '230003': InsufficientFunds,  # {"code":"230003","msg":"Balance insufficientnot "}
+                '230003': InsufficientFunds,  # {"code":"230003","msg":"Balance insufficient!"}
                 '260100': InsufficientFunds,  # {"code":"260100","msg":"account.noBalance"}
                 '300000': InvalidOrder,
                 '400000': BadSymbol,
@@ -369,6 +370,7 @@ class kucoin (Exchange):
         if percentage is not None:
             percentage = percentage * 100
         last = self.safe_float(ticker, 'last')
+        average = self.safe_float(ticker, 'averagePrice')
         symbol = None
         marketId = self.safe_string(ticker, 'symbol')
         if marketId is not None:
@@ -400,7 +402,7 @@ class kucoin (Exchange):
             'previousClose': None,
             'change': self.safe_float(ticker, 'changePrice'),
             'percentage': percentage,
-            'average': None,
+            'average': average,
             'baseVolume': self.safe_float(ticker, 'vol'),
             'quoteVolume': self.safe_float(ticker, 'volValue'),
             'info': ticker,
@@ -566,12 +568,14 @@ class kucoin (Exchange):
         #   bids: [['5c419328ef83c75456bd615c', '0.9', '0.09'], ...],}
         #
         data = response['data']
-        timestamp = self.safe_integer(data, 'sequence')
+        timestamp = self.safe_integer(data, 'time')
         # level can be a string such as 2_20 or 2_100
         levelString = self.safe_string(request, 'level')
         levelParts = levelString.split('_')
         level = int(levelParts[0])
-        return self.parse_order_book(data, timestamp, 'bids', 'asks', level - 2, level - 1)
+        orderbook = self.parse_order_book(data, timestamp, 'bids', 'asks', level - 2, level - 1)
+        orderbook['nonce'] = self.safe_integer(data, 'sequence')
+        return orderbook
 
     def create_order(self, symbol, type, side, amount, price=None, params={}):
         self.load_markets()
@@ -581,12 +585,18 @@ class kucoin (Exchange):
         request = {
             'clientOid': clientOid,
             'side': side,
-            'size': self.amount_to_precision(symbol, amount),
             'symbol': marketId,
             'type': type,
         }
         if type != 'market':
             request['price'] = self.price_to_precision(symbol, price)
+            request['size'] = self.amount_to_precision(symbol, amount)
+        else:
+            if self.safe_value(params, 'quoteAmount'):
+                # used to create market order by quote amount - https://github.com/ccxt/ccxt/issues/4876
+                request['funds'] = self.amount_to_precision(symbol, amount)
+            else:
+                request['size'] = self.amount_to_precision(symbol, amount)
         response = self.privatePostOrders(self.extend(request, params))
         #
         #     {
@@ -598,12 +608,11 @@ class kucoin (Exchange):
         #
         data = self.safe_value(response, 'data', {})
         timestamp = self.milliseconds()
-        return {
+        order = {
             'id': self.safe_string(data, 'orderId'),
             'symbol': symbol,
             'type': type,
             'side': side,
-            'amount': amount,
             'price': price,
             'cost': None,
             'filled': None,
@@ -615,6 +624,9 @@ class kucoin (Exchange):
             'clientOid': clientOid,
             'info': data,
         }
+        if not self.safe_value(params, 'quoteAmount'):
+            order['amount'] = amount
+        return order
 
     def cancel_order(self, id, symbol=None, params={}):
         request = {'orderId': id}
@@ -766,6 +778,7 @@ class kucoin (Exchange):
         remaining = amount - filled
         # bool
         status = 'open' if order['isActive'] else 'closed'
+        status = 'canceled' if order['cancelExist'] else status
         fee = {
             'currency': feeCurrency,
             'cost': feeCost,
@@ -988,7 +1001,7 @@ class kucoin (Exchange):
         else:
             timestamp = self.safe_integer(trade, 'createdAt')
             # if it's a historical v1 trade, the exchange returns timestamp in seconds
-            if ('dealValue' in list(trade.keys())) and (timestamp is not None):
+            if ('dealValue' in trade) and (timestamp is not None):
                 timestamp = timestamp * 1000
         price = self.safe_float_2(trade, 'price', 'dealPrice')
         side = self.safe_string(trade, 'side')
@@ -1127,10 +1140,10 @@ class kucoin (Exchange):
         timestamp = self.safe_integer_2(transaction, 'createdAt', 'createAt')
         id = self.safe_string(transaction, 'id')
         updated = self.safe_integer(transaction, 'updatedAt')
-        isV1 = not('createdAt' in list(transaction.keys()))
+        isV1 = not ('createdAt' in transaction)
         # if it's a v1 structure
         if isV1:
-            type = 'withdrawal' if ('address' in list(transaction.keys())) else 'deposit'
+            type = 'withdrawal' if ('address' in transaction) else 'deposit'
             if timestamp is not None:
                 timestamp = timestamp * 1000
             if updated is not None:
@@ -1207,7 +1220,7 @@ class kucoin (Exchange):
         #     }
         #
         responseData = response['data']['items']
-        return self.parseTransactions(responseData, currency, since, limit, {'type': 'deposit'})
+        return self.parse_transactions(responseData, currency, since, limit, {'type': 'deposit'})
 
     def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
         self.load_markets()
@@ -1267,7 +1280,7 @@ class kucoin (Exchange):
         #     }
         #
         responseData = response['data']['items']
-        return self.parseTransactions(responseData, currency, since, limit, {'type': 'withdrawal'})
+        return self.parse_transactions(responseData, currency, since, limit, {'type': 'withdrawal'})
 
     def fetch_balance(self, params={}):
         self.load_markets()
@@ -1311,7 +1324,7 @@ class kucoin (Exchange):
         if code is None:
             raise ArgumentsRequired(self.id + ' fetchLedger requires a code param')
         self.load_markets()
-        self.loadAccounts()
+        self.load_accounts()
         currency = self.currency(code)
         accountId = self.safe_string(params, 'accountId')
         if accountId is None:
@@ -1477,6 +1490,5 @@ class kucoin (Exchange):
         #
         errorCode = self.safe_string(response, 'code')
         message = self.safe_string(response, 'msg')
-        ExceptionClass = self.safe_value_2(self.exceptions, message, errorCode)
-        if ExceptionClass is not None:
-            raise ExceptionClass(self.id + ' ' + message)
+        self.throw_exactly_matched_exception(self.exceptions, message, message)
+        self.throw_exactly_matched_exception(self.exceptions, errorCode, message)

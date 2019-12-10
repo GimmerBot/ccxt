@@ -23,7 +23,7 @@ from ccxt.base.errors import NotSupported
 from ccxt.base.errors import InvalidNonce
 
 
-class bitstamp (Exchange):
+class bitstamp(Exchange):
 
     def describe(self):
         return self.deep_extend(super(bitstamp, self).describe(), {
@@ -112,13 +112,14 @@ class bitstamp (Exchange):
                 'trading': {
                     'tierBased': True,
                     'percentage': True,
-                    'taker': 0.25 / 100,
-                    'maker': 0.25 / 100,
+                    'taker': 0.5 / 100,
+                    'maker': 0.5 / 100,
                     'tiers': {
                         'taker': [
-                            [0, 0.25 / 100],
-                            [20000, 0.24 / 100],
-                            [100000, 0.22 / 100],
+                            [0, 0.5 / 100],
+                            [20000, 0.25 / 100],
+                            [100000, 0.24 / 100],
+                            [200000, 0.22 / 100],
                             [400000, 0.20 / 100],
                             [600000, 0.15 / 100],
                             [1000000, 0.14 / 100],
@@ -128,9 +129,10 @@ class bitstamp (Exchange):
                             [20000001, 0.10 / 100],
                         ],
                         'maker': [
-                            [0, 0.25 / 100],
-                            [20000, 0.24 / 100],
-                            [100000, 0.22 / 100],
+                            [0, 0.5 / 100],
+                            [20000, 0.25 / 100],
+                            [100000, 0.24 / 100],
+                            [200000, 0.22 / 100],
                             [400000, 0.20 / 100],
                             [600000, 0.15 / 100],
                             [1000000, 0.14 / 100],
@@ -619,7 +621,7 @@ class bitstamp (Exchange):
         if code is not None:
             currency = self.currency(code)
         transactions = self.filter_by_array(response, 'type', ['0', '1'], False)
-        return self.parseTransactions(transactions, currency, since, limit)
+        return self.parse_transactions(transactions, currency, since, limit)
 
     async def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
         await self.load_markets()
@@ -651,7 +653,7 @@ class bitstamp (Exchange):
         #         },
         #     ]
         #
-        return self.parseTransactions(response, None, since, limit)
+        return self.parse_transactions(response, None, since, limit)
 
     def parse_transaction(self, transaction, currency=None):
         #
@@ -1037,14 +1039,9 @@ class bitstamp (Exchange):
             code = self.safe_string(response, 'code')
             if code == 'API0005':
                 raise AuthenticationError(self.id + ' invalid signature, use the uid for the main account if you have subaccounts')
-            exact = self.exceptions['exact']
-            broad = self.exceptions['broad']
             feedback = self.id + ' ' + body
             for i in range(0, len(errors)):
                 value = errors[i]
-                if value in exact:
-                    raise exact[value](feedback)
-                broadKey = self.findBroadlyMatchedKey(broad, value)
-                if broadKey is not None:
-                    raise broad[broadKey](feedback)
+                self.throw_exactly_matched_exception(self.exceptions['exact'], value, feedback)
+                self.throw_broadly_matched_exception(self.exceptions['broad'], value, feedback)
             raise ExchangeError(feedback)

@@ -127,6 +127,7 @@ module.exports = class kucoin extends Exchange {
                 '1w': '1week',
             },
             'exceptions': {
+                'order not exist': OrderNotFound,
                 'order_not_exist': OrderNotFound, // {"code":"order_not_exist","msg":"order_not_exist"} ¯\_(ツ)_/¯
                 'order_not_exist_or_not_allow_to_cancel': InvalidOrder, // {"code":"400100","msg":"order_not_exist_or_not_allow_to_cancel"}
                 'Order size below the minimum requirement.': InvalidOrder, // {"code":"400100","msg":"Order size below the minimum requirement."}
@@ -365,6 +366,7 @@ module.exports = class kucoin extends Exchange {
             percentage = percentage * 100;
         }
         const last = this.safeFloat (ticker, 'last');
+        const average = this.safeFloat (ticker, 'averagePrice');
         let symbol = undefined;
         const marketId = this.safeString (ticker, 'symbol');
         if (marketId !== undefined) {
@@ -400,7 +402,7 @@ module.exports = class kucoin extends Exchange {
             'previousClose': undefined,
             'change': this.safeFloat (ticker, 'changePrice'),
             'percentage': percentage,
-            'average': undefined,
+            'average': average,
             'baseVolume': this.safeFloat (ticker, 'vol'),
             'quoteVolume': this.safeFloat (ticker, 'volValue'),
             'info': ticker,
@@ -579,12 +581,14 @@ module.exports = class kucoin extends Exchange {
         //   bids: [ [ '5c419328ef83c75456bd615c', '0.9', '0.09' ], ... ], }
         //
         const data = response['data'];
-        const timestamp = this.safeInteger (data, 'sequence');
+        const timestamp = this.safeInteger (data, 'time');
         // level can be a string such as 2_20 or 2_100
         const levelString = this.safeString (request, 'level');
         const levelParts = levelString.split ('_');
         const level = parseInt (levelParts[0]);
-        return this.parseOrderBook (data, timestamp, 'bids', 'asks', level - 2, level - 1);
+        const orderbook = this.parseOrderBook (data, timestamp, 'bids', 'asks', level - 2, level - 1);
+        orderbook['nonce'] = this.safeInteger (data, 'sequence');
+        return orderbook;
     }
 
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
@@ -595,12 +599,19 @@ module.exports = class kucoin extends Exchange {
         const request = {
             'clientOid': clientOid,
             'side': side,
-            'size': this.amountToPrecision (symbol, amount),
             'symbol': marketId,
             'type': type,
         };
         if (type !== 'market') {
             request['price'] = this.priceToPrecision (symbol, price);
+            request['size'] = this.amountToPrecision (symbol, amount);
+        } else {
+            if (this.safeValue (params, 'quoteAmount')) {
+                // used to create market order by quote amount - https://github.com/ccxt/ccxt/issues/4876
+                request['funds'] = this.amountToPrecision (symbol, amount);
+            } else {
+                request['size'] = this.amountToPrecision (symbol, amount);
+            }
         }
         const response = await this.privatePostOrders (this.extend (request, params));
         //
@@ -613,12 +624,11 @@ module.exports = class kucoin extends Exchange {
         //
         const data = this.safeValue (response, 'data', {});
         const timestamp = this.milliseconds ();
-        return {
+        const order = {
             'id': this.safeString (data, 'orderId'),
             'symbol': symbol,
             'type': type,
             'side': side,
-            'amount': amount,
             'price': price,
             'cost': undefined,
             'filled': undefined,
@@ -630,6 +640,10 @@ module.exports = class kucoin extends Exchange {
             'clientOid': clientOid,
             'info': data,
         };
+        if (!this.safeValue (params, 'quoteAmount')) {
+            order['amount'] = amount;
+        }
+        return order;
     }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
@@ -794,7 +808,8 @@ module.exports = class kucoin extends Exchange {
         const cost = this.safeFloat (order, 'dealFunds');
         const remaining = amount - filled;
         // bool
-        const status = order['isActive'] ? 'open' : 'closed';
+        let status = order['isActive'] ? 'open' : 'closed';
+        status = order['cancelExist'] ? 'canceled' : status;
         const fee = {
             'currency': feeCurrency,
             'cost': feeCost,
@@ -1580,9 +1595,7 @@ module.exports = class kucoin extends Exchange {
         //
         const errorCode = this.safeString (response, 'code');
         const message = this.safeString (response, 'msg');
-        const ExceptionClass = this.safeValue2 (this.exceptions, message, errorCode);
-        if (ExceptionClass !== undefined) {
-            throw new ExceptionClass (this.id + ' ' + message);
-        }
+        this.throwExactlyMatchedException (this.exceptions, message, message);
+        this.throwExactlyMatchedException (this.exceptions, errorCode, message);
     }
 };

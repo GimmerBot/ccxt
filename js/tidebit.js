@@ -102,8 +102,8 @@ module.exports = class tidebit extends Exchange {
                 'trading': {
                     'tierBased': false,
                     'percentage': true,
-                    'maker': 0.2 / 100,
-                    'taker': 0.2 / 100,
+                    'maker': 0.3 / 100,
+                    'taker': 0.3 / 100,
                 },
                 'funding': {
                     'tierBased': false,
@@ -477,14 +477,14 @@ module.exports = class tidebit extends Exchange {
     }
 
     handleErrors (code, reason, url, method, headers, body, response, requestHeaders, requestBody) {
-        if (code === 400) {
-            const error = this.safeValue (response, 'error');
-            const errorCode = this.safeString (error, 'code');
-            const feedback = this.id + ' ' + this.json (response);
-            const exceptions = this.exceptions;
-            if (errorCode in exceptions) {
-                throw new exceptions[errorCode] (feedback);
+        if ((code === 400) || (response === undefined)) {
+            const feedback = this.id + ' ' + body;
+            if (response === undefined) {
+                throw new ExchangeError (feedback);
             }
+            const error = this.safeValue (response, 'error', {});
+            const errorCode = this.safeString (error, 'code');
+            this.throwExactlyMatchedException (this.exceptions, errorCode, feedback);
             // fallback to default error handler
         }
     }

@@ -23,12 +23,6 @@ const {
     , throttle
     , capitalize
     , now
-    , microseconds
-    , seconds
-    , iso8601
-    , parse8601
-    , parseDate
-    , sleep
     , timeout
     , TimedOut
     , buildOHLCVC
@@ -47,6 +41,8 @@ const {
     , ExchangeNotAvailable } = require ('./errors')
 
 const { TRUNCATE, ROUND, DECIMAL_PLACES } = functions.precisionConstants
+
+const BN = require ('../static_dependencies/BN/bn')
 
 // ----------------------------------------------------------------------------
 // web3 / 0x imports
@@ -68,7 +64,7 @@ try {
     // nothing
 }
 
-/*  ------------------------------------------------------------------------ */
+// ----------------------------------------------------------------------------
 
 module.exports = class Exchange {
 
@@ -203,18 +199,9 @@ module.exports = class Exchange {
             },
             'precisionMode': DECIMAL_PLACES,
             'limits': {
-                'amount': {
-                    'min': undefined,
-                    'max': undefined,
-                },
-                'price': {
-                    'min': undefined,
-                    'max': undefined,
-                },
-                'cost': {
-                    'min': undefined,
-                    'max': undefined,
-                },
+                'amount': { 'min': undefined, 'max': undefined },
+                'price': { 'min': undefined, 'max': undefined },
+                'cost': { 'min': undefined, 'max': undefined },
             },
         } // return
     } // describe ()
@@ -244,12 +231,6 @@ module.exports = class Exchange {
         this.proxy = ''
         this.origin = '*' // CORS origin
 
-        this.iso8601      = iso8601
-        this.parse8601    = parse8601
-        this.parseDate    = parseDate
-        this.microseconds = microseconds
-        this.seconds      = seconds
-
         this.minFundingAddressLength = 1 // used in checkAddress
         this.substituteCommonCurrencyCodes = true  // reserved
 
@@ -275,7 +256,7 @@ module.exports = class Exchange {
         this.orderbooks  = {}
         this.tickers     = {}
         this.orders      = {}
-        this.trades      = {}
+        this.trades      = []
         this.transactions = {}
 
         this.requiresWeb3 = false
@@ -334,10 +315,6 @@ module.exports = class Exchange {
         return this.seconds ()
     }
 
-    milliseconds () {
-        return now ()
-    }
-
     encodeURIComponent (...args) {
         return encodeURIComponent (...args)
     }
@@ -352,6 +329,7 @@ module.exports = class Exchange {
                 }
             }
         })
+        return true
     }
 
     checkAddress (address) {
@@ -394,11 +372,7 @@ module.exports = class Exchange {
             } else if (this.httpsAgent && url.indexOf ('https://') === 0) {
                 params['agent'] = this.httpsAgent;
             } else if (this.agent) {
-                const [ protocol, ... rest ] = url.split ('//')
-                // this.agent.protocol contains a colon ('https:' or 'http:')
-                if (protocol === this.agent.protocol) {
-                    params['agent'] = this.agent;
-                }
+                params['agent'] = this.agent;
             }
 
             const promise =
@@ -536,15 +510,29 @@ module.exports = class Exchange {
         }
     }
 
+    throwExactlyMatchedException (exact, string, message) {
+        if (string in exact) {
+            throw new exact[string] (message)
+        }
+    }
+
+    throwBroadlyMatchedException (broad, string, message) {
+        const broadKey = this.findBroadlyMatchedKey (broad, string)
+        if (broadKey !== undefined) {
+            throw new broad[broadKey] (message)
+        }
+    }
+
     // a helper for matching error strings exactly vs broadly
     findBroadlyMatchedKey (broad, string) {
-        const keys = Object.keys (broad);
+        const keys = Object.keys (broad)
         for (let i = 0; i < keys.length; i++) {
-            const key = keys[i];
-            if (string.indexOf (key) >= 0)
-                return key;
+            const key = keys[i]
+            if (string.indexOf (key) >= 0) {
+                return key
+            }
         }
-        return undefined;
+        return undefined
     }
 
     handleErrors (statusCode, statusText, url, method, responseHeaders, responseBody, response, requestHeaders, requestBody) {
@@ -585,12 +573,6 @@ module.exports = class Exchange {
         if (ErrorClass !== undefined) {
             throw new ErrorClass ([ this.id, method, url, code, reason, details ].join (' '))
         }
-    }
-
-    isJsonEncodedObject (object) {
-        return ((typeof object === 'string') &&
-                (object.length >= 2) &&
-                ((object[0] === '{') || (object[0] === '[')))
     }
 
     getResponseHeaders (response) {
@@ -878,34 +860,6 @@ module.exports = class Exchange {
             return this.currencies[code]
 
         throw new ExchangeError (this.id + ' does not have currency code ' + code)
-    }
-
-    findMarket (string) {
-
-        if (this.markets === undefined)
-            throw new ExchangeError (this.id + ' markets not loaded')
-
-        if (typeof string === 'string') {
-
-            if (string in this.markets_by_id)
-                return this.markets_by_id[string]
-
-            if (string in this.markets)
-                return this.markets[string]
-        }
-
-        return string
-    }
-
-    findSymbol (string, market = undefined) {
-
-        if (market === undefined)
-            market = this.findMarket (string)
-
-        if (typeof market === 'object')
-            return market['symbol']
-
-        return string
     }
 
     market (symbol) {
@@ -1274,7 +1228,7 @@ module.exports = class Exchange {
     }
 
     currencyToPrecision (currency, fee) {
-        return this.decimalToPrecision (fee, ROUND, this.currencies[currency]['precision'], this.precisionMode);
+        return decimalToPrecision (fee, ROUND, this.currencies[currency]['precision'], this.precisionMode);
     }
 
     calculateFee (symbol, type, side, amount, price, takerOrMaker = 'taker', params = {}) {
@@ -1461,7 +1415,6 @@ module.exports = class Exchange {
                 ethUtil.keccak (Buffer.from (order['takerAssetData'].slice (2), 'hex')),
             ]
         );
-
         return '0x' + ethUtil.keccak (Buffer.concat ([
             Buffer.from (header, 'hex'),
             domainStructHash,
@@ -1531,4 +1484,19 @@ module.exports = class Exchange {
             throw new ExchangeError (this.id + ' this.twofa has not been set')
         }
     }
+
+    // the following functions take and return numbers represented as strings
+    // this is useful for arbitrary precision maths that floats lack
+    integerDivide (a, b) {
+        return new BN (a).div (new BN (b))
+    }
+
+    integerModulo (a, b) {
+        return new BN (a).mod (new BN (b))
+    }
+
+    integerPow (a, b) {
+        return new BN (a).pow (new BN (b))
+    }
 }
+

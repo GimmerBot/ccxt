@@ -268,6 +268,9 @@ module.exports = class zb extends Exchange {
         const marketFieldName = this.getMarketFieldName ();
         const request = {};
         request[marketFieldName] = market['id'];
+        if (limit !== undefined) {
+            request['size'] = limit;
+        }
         const response = await this.publicGetDepth (this.extend (request, params));
         return this.parseOrderBook (response);
     }
@@ -622,10 +625,8 @@ module.exports = class zb extends Exchange {
             const feedback = this.id + ' ' + body;
             if ('code' in response) {
                 const code = this.safeString (response, 'code');
-                if (code in this.exceptions) {
-                    const ExceptionClass = this.exceptions[code];
-                    throw new ExceptionClass (feedback);
-                } else if (code !== '1000') {
+                this.throwExactlyMatchedException (this.exceptions, code, feedback);
+                if (code !== '1000') {
                     throw new ExchangeError (feedback);
                 }
             }

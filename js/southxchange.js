@@ -54,8 +54,8 @@ module.exports = class southxchange extends Exchange {
                 'trading': {
                     'tierBased': false,
                     'percentage': true,
-                    'maker': 0.2 / 100,
-                    'taker': 0.2 / 100,
+                    'maker': 0.1 / 100,
+                    'taker': 0.3 / 100,
                 },
             },
             'commonCurrencies': {
@@ -75,7 +75,7 @@ module.exports = class southxchange extends Exchange {
             const base = this.safeCurrencyCode (baseId);
             const quote = this.safeCurrencyCode (quoteId);
             const symbol = base + '/' + quote;
-            const id = symbol;
+            const id = baseId + '/' + quoteId;
             result.push ({
                 'id': id,
                 'symbol': symbol,
