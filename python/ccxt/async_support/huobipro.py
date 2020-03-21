@@ -8,7 +8,9 @@ import hashlib
 import math
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import AuthenticationError
+from ccxt.base.errors import PermissionDenied
 from ccxt.base.errors import ArgumentsRequired
+from ccxt.base.errors import BadRequest
 from ccxt.base.errors import BadSymbol
 from ccxt.base.errors import InsufficientFunds
 from ccxt.base.errors import InvalidOrder
@@ -30,6 +32,7 @@ class huobipro(Exchange):
             'accounts': None,
             'accountsById': None,
             'hostname': 'api.huobi.pro',
+            'pro': True,
             'has': {
                 'CORS': False,
                 'fetchTickers': True,
@@ -59,7 +62,7 @@ class huobipro(Exchange):
                 '1y': '1year',
             },
             'urls': {
-                'logo': 'https://user-images.githubusercontent.com/1294454/27766569-15aa7b9a-5edd-11e7-9e7f-44791f4ee49c.jpg',
+                'logo': 'https://user-images.githubusercontent.com/1294454/76137448-22748a80-604e-11ea-8069-6e389271911d.jpg',
                 'api': {
                     'market': 'https://{hostname}',
                     'public': 'https://{hostname}',
@@ -98,13 +101,22 @@ class huobipro(Exchange):
                     ],
                 },
                 'private': {
+                    # todo add v2 endpoints
+                    # 'GET /v2/account/withdraw/quota
+                    # 'GET /v2/reference/currencies
+                    # 'GET /v2/account/deposit/address
                     'get': [
                         'account/accounts',  # 查询当前用户的所有账户(即account-id)
                         'account/accounts/{id}/balance',  # 查询指定账户的余额
+                        'account/accounts/{sub-uid}',
+                        'account/history',
+                        'cross-margin/loan-info',
+                        'fee/fee-rate/get',
                         'order/openOrders',
                         'order/orders',
                         'order/orders/{id}',  # 查询某个订单详情
                         'order/orders/{id}/matchresults',  # 查询某个订单的成交明细
+                        'order/orders/getClientOrder',
                         'order/history',  # 查询当前委托、历史委托
                         'order/matchresults',  # 查询当前成交、历史成交
                         'dw/withdraw-virtual/addresses',  # 查询虚拟币提现地址
@@ -114,9 +126,17 @@ class huobipro(Exchange):
                         'points/actions',
                         'points/orders',
                         'subuser/aggregate-balance',
+                        'stable-coin/exchange_rate',
+                        'stable-coin/quote',
                     ],
+                    # todo add v2 endpoints
+                    # POST /v2/sub-user/management
                     'post': [
+                        'futures/transfer',
+                        'order/batch-orders',
                         'order/orders/place',  # 创建并执行一个新订单(一步下单， 推荐使用)
+                        'order/orders/submitCancelClientOrder',
+                        'order/orders/batchCancelOpenOrders',
                         'order/orders',  # 创建一个新的订单请求 （仅创建订单，不执行下单）
                         'order/orders/{id}/place',  # 执行一个订单 （仅执行已创建的订单）
                         'order/orders/{id}/submitcancel',  # 申请撤销一个订单请求
@@ -130,6 +150,7 @@ class huobipro(Exchange):
                         'dw/transfer-out/margin',  # 借贷账户划出至现货账户
                         'margin/orders',  # 申请借贷
                         'margin/orders/{id}/repay',  # 归还借贷
+                        'stable-coin/exchange',
                         'subuser/transfer',
                     ],
                 },
@@ -145,6 +166,7 @@ class huobipro(Exchange):
             'exceptions': {
                 'exact': {
                     # err-code
+                    'api-not-support-temp-addr': PermissionDenied,  # {"status":"error","err-code":"api-not-support-temp-addr","err-msg":"API withdrawal does not support temporary addresses","data":null}
                     'timeout': RequestTimeout,  # {"ts":1571653730865,"status":"error","err-code":"timeout","err-msg":"Request Timeout"}
                     'gateway-internal-error': ExchangeNotAvailable,  # {"status":"error","err-code":"gateway-internal-error","err-msg":"Failed to load data. Try again later.","data":null}
                     'account-frozen-balance-insufficient-error': InsufficientFunds,  # {"status":"error","err-code":"account-frozen-balance-insufficient-error","err-msg":"trade account balance is not enough, left: `0.0027`","data":null}
@@ -161,6 +183,7 @@ class huobipro(Exchange):
                     'base-record-invalid': OrderNotFound,  # https://github.com/ccxt/ccxt/issues/5750
                     # err-msg
                     'invalid symbol': BadSymbol,  # {"ts":1568813334794,"status":"error","err-code":"invalid-parameter","err-msg":"invalid symbol"}
+                    'invalid-parameter': BadRequest,  # {"ts":1576210479343,"status":"error","err-code":"invalid-parameter","err-msg":"symbol trade not open now"}
                     'base-symbol-trade-disabled': BadSymbol,  # {"status":"error","err-code":"base-symbol-trade-disabled","err-msg":"Trading is disabled for self symbol","data":null}
                 },
             },
@@ -302,6 +325,21 @@ class huobipro(Exchange):
         return result
 
     def parse_ticker(self, ticker, market=None):
+        #
+        #     {
+        #         "amount": 26228.672978342216,
+        #         "open": 9078.95,
+        #         "close": 9146.86,
+        #         "high": 9155.41,
+        #         "id": 209988544334,
+        #         "count": 265846,
+        #         "low": 8988.0,
+        #         "version": 209988544334,
+        #         "ask": [9146.87, 0.156134],
+        #         "vol": 2.3822168242201668E8,
+        #         "bid": [9146.86, 0.080758],
+        #     }
+        #
         symbol = None
         if market is not None:
             symbol = market['symbol']
@@ -364,12 +402,34 @@ class huobipro(Exchange):
             'type': 'step0',
         }
         response = await self.marketGetDepth(self.extend(request, params))
+        #
+        #     {
+        #         "status": "ok",
+        #         "ch": "market.btcusdt.depth.step0",
+        #         "ts": 1583474832790,
+        #         "tick": {
+        #             "bids": [
+        #                 [9100.290000000000000000, 0.200000000000000000],
+        #                 [9099.820000000000000000, 0.200000000000000000],
+        #                 [9099.610000000000000000, 0.205000000000000000],
+        #             ],
+        #             "asks": [
+        #                 [9100.640000000000000000, 0.005904000000000000],
+        #                 [9101.010000000000000000, 0.287311000000000000],
+        #                 [9101.030000000000000000, 0.012121000000000000],
+        #             ],
+        #             "ts":1583474832008,
+        #             "version":104999698780
+        #         }
+        #     }
+        #
         if 'tick' in response:
             if not response['tick']:
                 raise ExchangeError(self.id + ' fetchOrderBook() returned empty response: ' + self.json(response))
-            orderbook = self.safe_value(response, 'tick')
-            result = self.parse_order_book(orderbook, orderbook['ts'])
-            result['nonce'] = orderbook['version']
+            tick = self.safe_value(response, 'tick')
+            timestamp = self.safe_integer(tick, 'ts', self.safe_integer(response, 'ts'))
+            result = self.parse_order_book(tick, timestamp)
+            result['nonce'] = self.safe_integer(tick, 'version')
             return result
         raise ExchangeError(self.id + ' fetchOrderBook() returned unrecognized response: ' + self.json(response))
 
@@ -380,7 +440,31 @@ class huobipro(Exchange):
             'symbol': market['id'],
         }
         response = await self.marketGetDetailMerged(self.extend(request, params))
-        return self.parse_ticker(response['tick'], market)
+        #
+        #     {
+        #         "status": "ok",
+        #         "ch": "market.btcusdt.detail.merged",
+        #         "ts": 1583494336669,
+        #         "tick": {
+        #             "amount": 26228.672978342216,
+        #             "open": 9078.95,
+        #             "close": 9146.86,
+        #             "high": 9155.41,
+        #             "id": 209988544334,
+        #             "count": 265846,
+        #             "low": 8988.0,
+        #             "version": 209988544334,
+        #             "ask": [9146.87, 0.156134],
+        #             "vol": 2.3822168242201668E8,
+        #             "bid": [9146.86, 0.080758],
+        #         }
+        #     }
+        #
+        ticker = self.parse_ticker(response['tick'], market)
+        timestamp = self.safe_value(response, 'ts')
+        ticker['timestamp'] = timestamp
+        ticker['datetime'] = self.iso8601(timestamp)
+        return ticker
 
     async def fetch_tickers(self, symbols=None, params={}):
         await self.load_markets()
@@ -401,6 +485,20 @@ class huobipro(Exchange):
         return result
 
     def parse_trade(self, trade, market=None):
+        #
+        # fetchTrades(public)
+        #
+        #     {
+        #         "amount": 0.010411000000000000,
+        #         "trade-id": 102090736910,
+        #         "ts": 1583497692182,
+        #         "id": 10500517034273194594947,
+        #         "price": 9096.050000000000000000,
+        #         "direction": "sell"
+        #     }
+        #
+        # fetchMyTrades(private)
+        #
         symbol = None
         if market is None:
             marketId = self.safe_string(trade, 'symbol')
@@ -438,7 +536,8 @@ class huobipro(Exchange):
                 'cost': feeCost,
                 'currency': feeCurrency,
             }
-        id = self.safe_string(trade, 'id')
+        tradeId = self.safe_string_2(trade, 'trade-id', 'tradeId')
+        id = self.safe_string(trade, 'id', tradeId)
         return {
             'id': id,
             'info': trade,
@@ -479,6 +578,30 @@ class huobipro(Exchange):
         if limit is not None:
             request['size'] = limit
         response = await self.marketGetHistoryTrade(self.extend(request, params))
+        #
+        #     {
+        #         "status": "ok",
+        #         "ch": "market.btcusdt.trade.detail",
+        #         "ts": 1583497692365,
+        #         "data": [
+        #             {
+        #                 "id": 105005170342,
+        #                 "ts": 1583497692182,
+        #                 "data": [
+        #                     {
+        #                         "amount": 0.010411000000000000,
+        #                         "trade-id": 102090736910,
+        #                         "ts": 1583497692182,
+        #                         "id": 10500517034273194594947,
+        #                         "price": 9096.050000000000000000,
+        #                         "direction": "sell"
+        #                     }
+        #                 ]
+        #             },
+        #             # ...
+        #         ]
+        #     }
+        #
         data = self.safe_value(response, 'data')
         result = []
         for i in range(0, len(data)):
@@ -661,6 +784,8 @@ class huobipro(Exchange):
         return await getattr(self, method)(symbol, since, limit, params)
 
     async def fetch_open_orders_v1(self, symbol=None, since=None, limit=None, params={}):
+        if symbol is None:
+            raise ArgumentsRequired(self.id + ' fetchOpenOrdersV1 requires a symbol argument')
         return await self.fetch_orders_by_states('pre-submitted,submitted,partial-filled', symbol, since, limit, params)
 
     async def fetch_closed_orders(self, symbol=None, since=None, limit=None, params={}):

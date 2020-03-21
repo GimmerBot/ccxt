@@ -5,10 +5,16 @@
 "use strict";
 
 const fs = require ('fs')
-    , log = require ('ololog')
+    , log = require ('ololog').unlimited
     , _ = require ('ansicolor').nice
     , errors = require ('../js/base/errors.js')
-    , { unCamelCase, precisionConstants, safeString } = require ('../js/base/functions.js')
+    , functions = require ('../js/base/functions.js')
+    , {
+        unCamelCase,
+        precisionConstants,
+        safeString,
+        unique,
+    } = functions
     , { basename } = require ('path')
     , {
         createFolderRecursively,
@@ -18,9 +24,8 @@ const fs = require ('fs')
 
 class Transpiler {
 
-    constructor (userConfig = {}) {
-
-        this.commonRegexes = [
+    getCommonRegexes () {
+        return [
 
             [ /\.deepExtend\s/g, '.deep_extend'],
             [ /\.safeFloat2\s/g, '.safe_float_2'],
@@ -61,6 +66,7 @@ class Transpiler {
             [ /\.parseTrades\s/g, '.parse_trades'],
             [ /\.parseTrade\s/g, '.parse_trade'],
             [ /\.parseTradingViewOHLCV\s/g, '.parse_trading_view_ohlcv'],
+            [ /\.convertTradingViewToOHLCV\s/g, '.convert_trading_view_to_ohlcv'],
             [ /\.parseTransaction\s/g, '.parse_transaction'],
             [ /\.parseTransactions\s/g, '.parse_transactions'],
             [ /\.parseOrderBook\s/g, '.parse_order_book'],
@@ -140,9 +146,15 @@ class Transpiler {
             [ /errorHierarchy/g, 'error_hierarchy'],
             [ /\.base16ToBinary/g, '.base16_to_binary'],
             [ /\'use strict\';?\s+/g, '' ],
+            [ /\.urlencodeWithArrayRepeat\s/g, '.urlencode_with_array_repeat' ],
+            [ /\.bind\s*\(this\)([,;])$/mg, '$1' ],
+            [ /\.call\s*\(this, /g, '(' ]
         ]
+    }
 
-        this.pythonRegexes = [
+    getPythonRegexes () {
+
+        return [
 
             [ /Array\.isArray\s*\(([^\)]+)\)/g, 'isinstance($1, list)' ],
             [ /([^\(\s]+)\s+instanceof\s+([^\)\s]+)/g, 'isinstance($1, $2)' ],
@@ -173,9 +185,10 @@ class Transpiler {
             [ /this\.binaryToBase16\s/g, 'base64.b16encode' ],
             [ /this\.base64ToBinary\s/g, 'base64.b64decode' ],
             [ /\.shift\s*\(\)/g, '.pop(0)' ],
+            [ /Number\.MAX_SAFE_INTEGER/g, 'float(\'inf\')']
 
         // insert common regexes in the middle (critical)
-        ].concat (this.commonRegexes).concat ([
+        ].concat (this.getCommonRegexes ()).concat ([
 
             // [ /this\.urlencode\s/g, '_urlencode.urlencode ' ], // use self.urlencode instead
             [ /this\./g, 'self.' ],
@@ -233,8 +246,8 @@ class Transpiler {
             [ /(^|\s)\/\//g, '$1#' ],
             [ /([^\n\s]) #/g, '$1  #' ],   // PEP8 E261
             [ /\.indexOf/g, '.find'],
-            [ /\strue/g, ' True'],
-            [ /\sfalse/g, ' False'],
+            [ /(\s|\()true/g, '$1True'],
+            [ /(\s|\()false/g, '$1False'],
             [ /([^\s]+\s*\(\))\.toString\s+\(\)/g, 'str($1)' ],
             [ /([^\s]+)\.toString \(\)/g, 'str($1)' ],
             [ /([^\s]+)\.join\s*\(\s*([^\)\[\]]+?)\s*\)/g, '$2.join($1)' ],
@@ -255,14 +268,18 @@ class Transpiler {
             [ /\sdelete\s/g, ' del ' ],
             [ /(?<!#.+)null/, 'None' ],
         ])
+    }
 
-        this.python2Regexes = [
+    getPython2Regexes () {
+        return [
             [ /(\s)await(\s)/g, '$1' ]
         ]
+    }
 
-        this.phpRegexes = [
+    getPHPRegexes () {
+        return [
             [ /\{([a-zA-Z0-9_]+?)\}/g, '~$1~' ], // resolve the "arrays vs url params" conflict (both are in {}-brackets)
-            [ /Array\.isArray\s*\(([^\)]+)\)/g, "gettype ($1) === 'array' && count (array_filter (array_keys ($1), 'is_string')) == 0" ],
+            [ /Array\.isArray\s*\(([^\)]+)\)/g, "gettype($1) === 'array' && count(array_filter(array_keys($1), 'is_string')) == 0" ],
 
             [ /typeof\s+([^\s\[]+)(?:\s|\[(.+?)\])\s+\=\=\=?\s+\'undefined\'/g, '$1[$2] === null' ],
             [ /typeof\s+([^\s\[]+)(?:\s|\[(.+?)\])\s+\!\=\=?\s+\'undefined\'/g, '$1[$2] !== null' ],
@@ -278,23 +295,24 @@ class Transpiler {
             [ /(.+?)\s+\=\=\=?\s+undefined/g, '$1 === null' ],
             [ /(.+?)\s+\!\=\=?\s+undefined/g, '$1 !== null' ],
 
-            [ /typeof\s+([^\s\[]+)(?:\s|\[(.+?)\])\s+\=\=\=?\s+\'string\'/g, "gettype ($1[$2]) === 'string'" ],
-            [ /typeof\s+([^\s\[]+)(?:\s|\[(.+?)\])\s+\!\=\=?\s+\'string\'/g, "gettype ($1[$2]) !== 'string'" ],
-            [ /typeof\s+([^\s]+)\s+\=\=\=?\s+\'string\'/g, "gettype ($1) === 'string'" ],
-            [ /typeof\s+([^\s]+)\s+\!\=\=?\s+\'string\'/g, "gettype ($1) !== 'string'" ],
+            [ /typeof\s+([^\s\[]+)(?:\s|\[(.+?)\])\s+\=\=\=?\s+\'string\'/g, "gettype($1[$2]) === 'string'" ],
+            [ /typeof\s+([^\s\[]+)(?:\s|\[(.+?)\])\s+\!\=\=?\s+\'string\'/g, "gettype($1[$2]) !== 'string'" ],
+            [ /typeof\s+([^\s]+)\s+\=\=\=?\s+\'string\'/g, "gettype($1) === 'string'" ],
+            [ /typeof\s+([^\s]+)\s+\!\=\=?\s+\'string\'/g, "gettype($1) !== 'string'" ],
 
             [ /undefined/g, 'null' ],
-            [ /this\.extend/g, 'array_merge' ],
+            [ /this\.extend\s/g, 'array_merge' ],
             [ /this\.stringToBinary\s*\((.*)\)/g, '$1' ],
-            [ /this\.stringToBase64/g, 'base64_encode' ],
+            [ /this\.stringToBase64\s/g, 'base64_encode' ],
             [ /this\.binaryToBase16\s/g, 'bin2hex' ],
-            [ /this\.base64ToBinary/g, 'base64_decode' ],
-            [ /this\.deepExtend/g, 'array_replace_recursive'],
+            [ /this\.base64ToBinary\s/g, 'base64_decode' ],
+            [ /this\.deepExtend\s/g, 'array_replace_recursive'],
             [ /(\w+)\.shift\s*\(\)/g, 'array_shift($1)' ],
             [ /(\w+)\.pop\s*\(\)/g, 'array_pop($1)' ],
+            [ /Number\.MAX_SAFE_INTEGER/g, 'PHP_INT_MAX' ],
 
         // insert common regexes in the middle (critical)
-        ].concat (this.commonRegexes).concat ([
+        ].concat (this.getCommonRegexes ()).concat ([
 
             [ /this\./g, '$this->' ],
             [ / this;/g, ' $this;' ],
@@ -316,21 +334,21 @@ class Transpiler {
             [ /throw ([\S]+)\;/g, 'throw $$$1;' ],
             [ '([^a-z]+) (' + Object.keys (errors).join ('|') + ')([^\\s])', "$1 '\\\\ccxt\\\\$2'$3" ],
             [ /\}\s+catch \(([\S]+)\) {/g, '} catch (Exception $$$1) {' ],
-            [ /for\s+\(([a-zA-Z0-9_]+)\s*=\s*([^\;\s]+\s*)\;[^\<\>\=]+(\<=|\>=|<|>)\s*(.*)\.length\s*\;([^\)]+)\)\s*{/g, 'for ($1 = $2; $1 $3 count ($4);$5) {' ],
+            [ /for\s+\(([a-zA-Z0-9_]+)\s*=\s*([^\;\s]+\s*)\;[^\<\>\=]+(\<=|\>=|<|>)\s*(.*)\.length\s*\;([^\)]+)\)\s*{/g, 'for ($1 = $2; $1 $3 count($4);$5) {' ],
             [ /for\s+\(([a-zA-Z0-9_]+)\s*=\s*([^\;\s]+\s*)\;[^\<\>\=]+(\<=|\>=|<|>)\s*(.*)\s*\;([^\)]+)\)\s*{/g, 'for ($1 = $2; $1 $3 $4;$5) {' ],
-            [ /([^\s]+)\.length\;/g, 'is_array ($1) ? count ($1) : 0;' ],
-            [ /([^\s\(]+)\.length/g, 'strlen ($1)' ],
+            [ /([^\s]+)\.length\;/g, 'is_array($1) ? count($1) : 0;' ],
+            [ /([^\s\(]+)\.length/g, 'strlen($1)' ],
             [ /\.push\s*\(([\s\S]+?)\)\;/g, '[] = $1;' ],
             [ /(\s)await(\s)/g, '$1' ],
             [ /([\S])\: /g, '$1 => ' ],
 
         // add {}-array syntax conversions up to 20 levels deep
-        ]).concat ([ ... Array (20) ].map (x => [ /\{([^\;\{]+?)\}([^\s])/g, 'array ($1)$2' ])).concat ([
+        ]).concat ([ ... Array (20) ].map (x => [ /\{([^\;\{]+?)\}([^\s])/g, 'array($1)$2' ])).concat ([
 
             [ /\[\s*([^\]]+?)\s*\]\.join\s*\(\s*([^\)]+?)\s*\)/g, "implode($2, array($1))" ],
 
         // add []-array syntax conversions up to 20 levels deep
-        ]).concat ([ ... Array (20) ].map (x => [ /\[(\s[^\]]+?\s)\]/g, 'array ($1)' ])).concat ([
+        ]).concat ([ ... Array (20) ].map (x => [ /\[(\s[^\]]+?\s)\]/g, 'array($1)' ])).concat ([
 
             [ /JSON\.stringify/g, 'json_encode' ],
             [ /JSON\.parse\s+\(([^\)]+)\)/g, 'json_decode($1, $$as_associative_array = true)' ],
@@ -350,12 +368,12 @@ class Transpiler {
             [ /([^\s\(]+).slice \(([^\,\)]+)\,\s*([^\)]+)\)/g, 'mb_substr($1, $2, $3 - $2)' ],
             [ /([^\s\(]+).split \(('[^']*'|[^\,]+?)\)/g, 'explode($2, $1)' ],
             [ /Math\.floor\s*\(([^\)]+)\)/g, '(int) floor($1)' ],
-            [ /Math\.abs\s*\(([^\)]+)\)/g, 'abs ($1)' ],
+            [ /Math\.abs\s*\(([^\)]+)\)/g, 'abs($1)' ],
             [ /Math\.round\s*\(([^\)]+)\)/g, '(int) round($1)' ],
             [ /Math\.ceil\s*\(([^\)]+)\)/g, '(int) ceil($1)' ],
             [ /Math\.pow\s*\(([^\)]+)\)/g, 'pow($1)' ],
             [ /Math\.log/g, 'log' ],
-            [ /([^\(\s]+)\s+%\s+([^\s\)]+)/g, 'fmod($1, $2)' ],
+            [ /([^\(\s]+)\s+%\s+([^\s\,\;\)]+)/g, 'fmod($1, $2)' ],
             [ /\(([^\s\(]+)\.indexOf\s*\(([^\)]+)\)\s*\>\=\s*0\)/g, '(mb_strpos($1, $2) !== false)' ],
             [ /([^\s\(]+)\.indexOf\s*\(([^\)]+)\)\s*\>\=\s*0/g, 'mb_strpos($1, $2) !== false' ],
             [ /([^\s\(]+)\.indexOf\s*\(([^\)]+)\)/g, 'mb_strpos($1, $2)' ],
@@ -369,11 +387,21 @@ class Transpiler {
             [ /\sdelete\s([^\n]+)\;/g, ' unset($1);' ],
             [ /\~([a-zA-Z0-9_]+?)\~/g, '{$1}' ], // resolve the "arrays vs url params" conflict (both are in {}-brackets)
         ])
+    }
 
-        //---------------------------------------------------------------------
-        // the following common headers are used for transpiled tests
+    getPythonBaseMethods () {
+        return []
+    }
 
-        this.pyPreamble = [
+    getPHPBaseMethods () {
+        return []
+    }
+
+    //-------------------------------------------------------------------------
+    // the following common headers are used for transpiled tests
+
+    getPythonPreamble () {
+        return [
             "import os",
             "import sys",
             "",
@@ -388,8 +416,10 @@ class Transpiler {
             "# ----------------------------------------------------------------------------",
             "",
         ].join ("\n")
+    }
 
-        this.phpPreamble = [
+    getPHPPreamble () {
+        return [
             "<?php",
             "namespace ccxt;",
             "include_once (__DIR__.'/../../ccxt.php');",
@@ -401,12 +431,11 @@ class Transpiler {
             "// -----------------------------------------------------------------------------",
             "",
         ].join ("\n")
-
     }
 
     // ------------------------------------------------------------------------
     // a helper to apply an array of regexes and substitutions to text
-    // accepts and array like [ [ regex, substitution ], ... ]
+    // accepts an array like [ [ regex, substitution ], ... ]
 
     regexAll (text, array) {
         for (const i in array) {
@@ -421,6 +450,46 @@ class Transpiler {
     // ========================================================================
     // one-time helpers
 
+    createPythonClassDeclaration (className, baseClass) {
+        return 'class ' + className + '(' + baseClass + '):'
+    }
+
+    createPythonClassHeader (imports, bodyAsString) {
+        return [
+            "# -*- coding: utf-8 -*-",
+            "",
+            "# PLEASE DO NOT EDIT THIS FILE, IT IS GENERATED AND WILL BE OVERWRITTEN:",
+            "# https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code",
+            "",
+            ... imports,
+            // 'from ' + importFrom + ' import ' + baseClass,
+            ... (bodyAsString.match (/basestring/) ? [
+                "",
+                "# -----------------------------------------------------------------------------",
+                "",
+                "try:",
+                "    basestring  # Python 3",
+                "except NameError:",
+                "    basestring = str  # Python 2",
+            ] : [])
+        ]
+    }
+
+    createPythonClassImports (baseClass, async = false) {
+
+        const baseClasses = {
+            'Exchange': 'base.exchange',
+        }
+
+        async = (async ? '.async_support' : '')
+
+        return [
+            (baseClass.indexOf ('ccxt.') === 0) ?
+                ('import ccxt' + async + ' as ccxt') :
+                ('from ccxt' + async + '.' + safeString (baseClasses, baseClass, baseClass) + ' import ' + baseClass)
+        ]
+    }
+
     createPythonClass (className, baseClass, body, methods, async = false) {
 
         const pythonStandardLibraries = {
@@ -428,6 +497,7 @@ class Transpiler {
             'hashlib': 'hashlib',
             'math': 'math',
             'json.loads': 'json',
+            'sys': 'sys',
         }
 
         const baseClasses = {
@@ -436,33 +506,16 @@ class Transpiler {
 
         async = (async ? '.async_support' : '')
 
-        const ccxtImports = [
-            (baseClass.indexOf ('ccxt.') === 0) ?
-                ('import ccxt' + async + ' as ccxt') :
-                ('from ccxt' + async + '.' + safeString (baseClasses, baseClass, baseClass) + ' import ' + baseClass)
-        ]
+        const imports = this.createPythonClassImports (baseClass, async)
 
         let bodyAsString = body.join ("\n")
 
-        let header = [
-            "# -*- coding: utf-8 -*-\n",
-            "# PLEASE DO NOT EDIT THIS FILE, IT IS GENERATED AND WILL BE OVERWRITTEN:",
-            "# https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code\n",
-            ... ccxtImports,
-            // 'from ' + importFrom + ' import ' + baseClass,
-            ... (bodyAsString.match (/basestring/) ? [
-                "\n# -----------------------------------------------------------------------------\n",
-                "try:",
-                "    basestring  # Python 3",
-                "except NameError:",
-                "    basestring = str  # Python 2",
-            ] : [])
-        ]
+        let header = this.createPythonClassHeader (imports, bodyAsString)
 
         const libraries = []
 
         for (let library in pythonStandardLibraries) {
-            const regex = new RegExp ("[^\\']" + library + "[^\\'a-zA-Z]")
+            const regex = new RegExp ("[^\\'a-zA-Z]" + library + "[^\\'a-zA-Z]")
             if (bodyAsString.match (regex))
                 libraries.push ('import ' + pythonStandardLibraries[library])
         }
@@ -471,8 +524,9 @@ class Transpiler {
 
         for (let error in errors) {
             const regex = new RegExp ("[^\\'\"]" + error + "[^\\'\"]")
-            if (bodyAsString.match (regex))
+            if (bodyAsString.match (regex)) {
                 errorImports.push ('from ccxt.base.errors import ' + error)
+            }
         }
 
         const precisionImports = []
@@ -485,13 +539,15 @@ class Transpiler {
 
         header = header.concat (libraries, errorImports, precisionImports)
 
+        methods = methods.concat (this.getPythonBaseMethods ())
+
         for (let method of methods) {
-            const regex = new RegExp ('self\\.(' + method + ')\\s*\\(', 'g')
+            const regex = new RegExp ('self\\.(' + method + ')([^a-zA-Z0-9_])', 'g')
             bodyAsString = bodyAsString.replace (regex,
-                (match, p1) => ('self.' + unCamelCase (p1) + '('))
+                (match, p1, p2) => ('self.' + unCamelCase (p1) + p2))
         }
 
-        header.push ("\n\nclass " + className + '(' + baseClass + '):')
+        header.push ("\n\n" + this.createPythonClassDeclaration (className, baseClass))
 
         const footer = [
             '', // footer (last empty line)
@@ -503,9 +559,12 @@ class Transpiler {
 
     // ------------------------------------------------------------------------
 
-    createPHPClass (className, baseClass, body, methods) {
+    createPHPClassDeclaration (className, baseClass) {
+        return 'class ' + className + ' extends ' + baseClass + ' {'
+    }
 
-        const header = [
+    createPHPClassHeader (className, baseClass, bodyAsString) {
+        return [
             "<?php",
             "",
             "namespace ccxt;",
@@ -514,17 +573,39 @@ class Transpiler {
             "// https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code",
             "",
             "use Exception; // a common import",
-            "",
-            'class ' + className + ' extends ' + baseClass + ' {',
         ]
+    }
+
+    createPHPClass (className, baseClass, body, methods) {
 
         let bodyAsString = body.join ("\n")
 
-        for (let method of methods) {
-            const regex = new RegExp ('this->(' + method + ')\\s*\\(', 'g')
-            bodyAsString = bodyAsString.replace (regex,
-                (match, p1) => ('this->' + unCamelCase (p1) + ' ('))
+        let header = this.createPHPClassHeader (className, baseClass, bodyAsString)
+
+        const errorImports = []
+
+        for (let error in errors) {
+            const regex = new RegExp ("[^'\"]" + error + "[^'\"]")
+            if (bodyAsString.match (regex)) {
+                errorImports.push ('use \\ccxt\\' + error + ';')
+            }
         }
+
+        header = header.concat (errorImports)
+
+        methods = methods.concat (this.getPHPBaseMethods ())
+
+        for (let method of methods) {
+            const regex = new RegExp ('\\$this->(' + method + ')\\s?(\\(|[^a-zA-Z0-9_])', 'g')
+            bodyAsString = bodyAsString.replace (regex,
+                (match, p1, p2) => {
+                    return ((p2 === '(') ?
+                        ('$this->' + unCamelCase (p1) + p2) : // support direct php calls
+                        ("array($this, '" + unCamelCase (p1) + "')" + p2)) // as well as passing instance methods as callables
+                })
+        }
+
+        header.push ("\n" + this.createPHPClassDeclaration (className, baseClass))
 
         const footer =[
             "}\n",
@@ -539,7 +620,7 @@ class Transpiler {
     transpileJavaScriptToPython3 ({ js, className, removeEmptyLines }) {
 
         // transpile JS → Python 3
-        let python3Body = this.regexAll (js, this.pythonRegexes)
+        let python3Body = this.regexAll (js, this.getPythonRegexes ())
 
         if (removeEmptyLines)
             python3Body = python3Body.replace (/$\s*$/gm, '')
@@ -551,7 +632,7 @@ class Transpiler {
         let orderedDictMatches = undefined
         while (orderedDictMatches = orderedDictRegex.exec (python3Body)) {
             let replaced = orderedDictMatches[1].replace (/^(\s+)([^\:]+)\:\s*([^\,]+)\,$/gm, '$1($2, $3),')
-            python3Body = python3Body.replace (orderedDictRegex, '\.ordered ([' + replaced + '])')
+            python3Body = python3Body.replace (orderedDictRegex, '\.ordered([' + replaced + '])')
         }
 
         // special case for Python super
@@ -567,7 +648,7 @@ class Transpiler {
     transpilePython3ToPython2 (py) {
 
         // remove await from Python 2 body (transpile Python 3 → Python 2)
-        let python2Body = this.regexAll (py, this.python2Regexes)
+        let python2Body = this.regexAll (py, this.getPython2Regexes ())
 
         return python2Body
     }
@@ -601,7 +682,7 @@ class Transpiler {
             allVariables.push (catchClauseMatches[1])
         }
 
-        allVariables = allVariables.map (error => this.regexAll (error, this.commonRegexes))
+        allVariables = allVariables.map (error => this.regexAll (error, this.getCommonRegexes ()))
 
         // append $ to all variables in the method (PHP syntax demands $ at the beginning of a variable name)
         let phpVariablesRegexes = allVariables.map (x => [ "(^|[^$$a-zA-Z0-9\\.\\>'_/])" + x + "([^a-zA-Z0-9'_/])", '$1$$' + x + '$2' ])
@@ -611,7 +692,8 @@ class Transpiler {
         let variablePropertiesRegexes = allVariables.map (x => [ "(^|[^a-zA-Z0-9\\.\\>'_])" + x + '\\.', '$1' + x + '->' ])
 
         // transpile JS → PHP
-        let phpBody = this.regexAll (js, this.phpRegexes.concat (phpVariablesRegexes).concat (variablePropertiesRegexes))
+        const phpRegexes = this.getPHPRegexes ()
+        let phpBody = this.regexAll (js, phpRegexes.concat (phpVariablesRegexes).concat (variablePropertiesRegexes))
 
         return phpBody
     }
@@ -673,7 +755,7 @@ class Transpiler {
 
     // ------------------------------------------------------------------------
 
-    transpileDerivedExchangeClass (contents) {
+    transpileDerivedExchangeClass (contents, methodNames = undefined) {
 
         let exchangeClassDeclarationMatches = contents.match (/^module\.exports\s*=\s*class\s+([\S]+)\s+extends\s+([\S]+)\s+{([\s\S]+?)^};*/m)
 
@@ -688,7 +770,7 @@ class Transpiler {
         let python3 = []
         let php = []
 
-        let methodNames = []
+        methodNames = [] // methodNames || []
 
         // run through all methods
         for (let i = 0; i < methods.length; i++) {
@@ -791,8 +873,25 @@ class Transpiler {
         try {
 
             const { python2Folder, python3Folder, phpFolder } = options
-            const contents = fs.readFileSync (jsFolder + filename, 'utf8')
-            const { python2, python3, php, className, baseClass } = this.transpileDerivedExchangeClass (contents)
+            const path = jsFolder + filename
+            const contents = fs.readFileSync (path, 'utf8')
+
+            // function getMethodNames (object) {
+            //     let functions = []
+            //     let o = object
+            //     do {
+            //         functions = functions.concat (Object.getOwnPropertyNames (o))
+            //     } while (o = Object.getPrototypeOf (o))
+            //     return unique (functions.filter (f => (typeof object[f] === 'function')))
+            // }
+            // const exchangeClass = require ('.' + path)
+            // const exchange = new exchangeClass ()
+            // const methodNames = getMethodNames (exchange)
+            // const { python2, python3, php, className, baseClass } =
+            //     this.transpileDerivedExchangeClass (contents, methodNames)
+
+            const { python2, python3, php, className, baseClass } =
+                this.transpileDerivedExchangeClass (contents)
 
             log.cyan ('Transpiling from', filename.yellow)
 
@@ -868,11 +967,12 @@ class Transpiler {
 
     // ========================================================================
 
-    exportTypeScriptDeclarations (classes) {
+    exportTypeScriptDeclarations (file, classes) {
 
-        const file = './ccxt.d.ts'
-        const regex = /(?:    export class [^\s]+ extends [^\s]+ \{\}[\r]?[\n])+/
-        const replacement = Object.keys (classes).map (className => {
+        log.bright.cyan ('Exporting TypeScript declarations →', file.yellow)
+
+        const regex = /\/[\n]{2}(?:    export class [^\s]+ extends [^\s]+ \{\}[\r]?[\n])+/
+        const replacement = "/\n\n" + Object.keys (classes).map (className => {
             const baseClass = classes[className]
             return '    export class ' + className + ' extends ' + baseClass + " {}"
         }).join ("\n") + "\n"
@@ -893,34 +993,91 @@ class Transpiler {
             [ /module\.exports = [^\;]+\;\n/s, '' ],
         ]).trim ()
 
+        const message = 'Transpiling error hierachy →'
+        const root = errorHierarchy['BaseError']
+
         const { python3Body, phpBody } = this.transpileJavaScriptToPythonAndPHP ({ js })
 
-       const python3BodyIntellisense = python3Body + '\n\n' + Array.from (function* intellisense (map) {
-            for (const key in map) {
-                yield key + ' = Exception'
-                yield* intellisense (map[key])
+        // a helper to generate a list of exception class declarations
+        // properly derived from corresponding parent classes according
+        // to the error hierarchy
+
+        function intellisense (map, parent, generate, classes) {
+            function* generator(map, parent, generate, classes) {
+                for (const key in map) {
+                    yield generate (key, parent, classes)
+                    yield* generator (map[key], key, generate, classes)
+                }
             }
-        } (errorHierarchy['BaseError'])).join ('\n')
-
-        const message = 'Transpiling error hierachy →'
-
-        const python = {
-            filename: './python/ccxt/base/errors.py',
-            regex: /error_hierarchy = [\S\s]+= Exception/s,
-            replacement: python3BodyIntellisense,
+            return Array.from (generator (map, parent, generate, classes))
         }
 
-        log.bright.cyan (message, python.filename.yellow)
-        replaceInFile (... Object.values (python))
+        // Python -------------------------------------------------------------
 
-        const php = {
-            filename:'./php/base/errors.php',
-            regex: /\$error_hierarchy = .+?\n\)\;/s,
-            replacement: phpBody,
+        function pythonDeclareErrorClass (name, parent, classes) {
+            classes.push (name)
+            return [
+                'class ' + name + '(' + parent + '):',
+                '    pass',
+                '',
+                '',
+            ].join ('\n');
         }
 
-        log.bright.cyan (message, php.filename.yellow)
-        replaceInFile (... Object.values (php))
+        const pythonBaseError = [
+            'class BaseError(Exception):',
+            '    pass',
+            '',
+            '',
+        ].join ('\n');
+
+        const quote = (s) => "'" + s + "'" // helper to add quotes around class names
+
+        const pythonExports = [ 'error_hierarchy' ]
+        const pythonErrors = intellisense (root, 'BaseError', pythonDeclareErrorClass, pythonExports)
+        const pythonAll = '__all__ = [\n    ' + pythonExports.map (quote).join (',\n    ') + '\n]'
+
+        const python3BodyIntellisense = python3Body + '\n\n\n' + pythonBaseError + '\n' + pythonErrors.join ('\n') + '\n' + pythonAll + '\n'
+
+        const pythonFilename = './python/ccxt/base/errors.py'
+        log.bright.cyan (message, pythonFilename.yellow)
+        fs.writeFileSync (pythonFilename, python3BodyIntellisense)
+
+        // PHP ----------------------------------------------------------------
+
+        function phpDeclareErrorClass (name, parent) {
+            return 'class ' + name + ' extends ' + parent + ' {};'
+        }
+
+        const phpHeader = '<?php\n\nnamespace ccxt;\n\nuse Exception;\n\n'
+        const phpBaseError = 'class BaseError extends Exception {};'
+        const phpErrors = intellisense (root, 'BaseError', phpDeclareErrorClass)
+        const phpBodyIntellisense = phpHeader + phpBody + '\n\n' + phpBaseError + '\n' + phpErrors.join ('\n')
+
+        const phpFilename = './php/base/errors.php'
+        log.bright.cyan (message, phpFilename.yellow)
+        fs.writeFileSync (phpFilename, phpBodyIntellisense)
+
+        // TypeScript ---------------------------------------------------------
+
+        function tsDeclareErrorClass (name, parent) {
+            return 'export class ' + name + ' extends ' + parent + ' {}'
+        }
+
+        const tsBaseError = [
+            'export class BaseError extends Error {',
+            '    constructor(message: string);',
+            '}',
+        ].join ('\n    ')
+
+        const tsErrors = intellisense (root, 'BaseError', tsDeclareErrorClass)
+
+        const tsBodyIntellisense = tsBaseError + '\n\n    ' + tsErrors.join ('\n    ') + '\n\n'
+
+        const tsFilename = './ccxt.d.ts'
+        log.bright.cyan (message, tsFilename.yellow)
+        const regex = /export class BaseError[^}]+\}[\n][\n](?:\s+export class [a-zA-Z]+ extends [a-zA-Z]+ \{\}[\n])+[\n]/m
+        replaceInFile (tsFilename, regex, tsBodyIntellisense)
     }
 
     //-----------------------------------------------------------------------------
@@ -953,8 +1110,8 @@ class Transpiler {
             "",
         ].join ("\n")
 
-        const python = this.pyPreamble + pythonHeader + python2Body
-        const php = this.phpPreamble + phpBody
+        const python = this.getPythonPreamble () + pythonHeader + python2Body
+        const php = this.getPHPPreamble () + phpBody
 
         log.magenta ('→', pyFile.yellow)
         log.magenta ('→', phpFile.yellow)
@@ -995,8 +1152,15 @@ class Transpiler {
             "from ccxt.base.decimal_to_precision import PAD_WITH_ZERO         # noqa F401",
             "from ccxt.base.decimal_to_precision import NO_PADDING            # noqa F401",
             "from ccxt.base.decimal_to_precision import number_to_string      # noqa F401",
+            "from ccxt.base.exchange import Exchange                          # noqa F401",
             "",
-            "# ----------------------------------------------------------------------------",
+            "",
+            "def toWei(amount, decimals):",
+            "    return Exchange.toWei(amount, decimals)",
+            "",
+            "",
+            "def fromWei(amount, decimals):",
+            "    return Exchange.fromWei(amount, decimals)",
             "",
             "",
         ].join ("\n")
@@ -1020,11 +1184,17 @@ class Transpiler {
             "function number_to_string ($x) {",
             "    return Exchange::number_to_string ($x);",
             "}",
+            "function toWei ($amount, $decimals) {",
+            "    return Exchange::toWei ($amount, $decimals);",
+            "}",
+            "function fromWei ($amount, $decimals) {",
+            "    return Exchange::fromWei ($amount, $decimals);",
+            "}",
             "",
         ].join ("\n")
 
-        const python = this.pyPreamble + pythonHeader + python2Body
-        const php = this.phpPreamble + phpHeader + phpBody
+        const python = this.getPythonPreamble () + pythonHeader + python2Body
+        const php = this.getPHPPreamble () + phpHeader + phpBody
 
         log.magenta ('→', pyFile.yellow)
         log.magenta ('→', phpFile.yellow)
@@ -1090,8 +1260,8 @@ class Transpiler {
             "}",
         ].join ("\n")
 
-        const python = this.pyPreamble + pythonHeader + python2Body
-        const php = this.phpPreamble + phpHeader + phpBody
+        const python = this.getPythonPreamble () + pythonHeader + python2Body
+        const php = this.getPHPPreamble () + phpHeader + phpBody
 
         log.magenta ('→', pyFile.yellow)
         log.magenta ('→', phpFile.yellow)
@@ -1115,6 +1285,8 @@ class Transpiler {
         createFolderRecursively (python3Folder)
         createFolderRecursively (phpFolder)
 
+        //*
+
         const classes = this.transpileDerivedExchangeFiles ('./js/', options, pattern)
 
         if (classes === null) {
@@ -1124,7 +1296,9 @@ class Transpiler {
 
         // HINT: if we're going to support specific class definitions
         // this process won't work anymore as it will override the definitions
-        this.exportTypeScriptDeclarations (classes)
+        this.exportTypeScriptDeclarations ('./ccxt.d.ts', classes)
+
+        //*/
 
         this.transpileErrorHierarchy ()
 

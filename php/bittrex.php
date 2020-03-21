@@ -6,21 +6,28 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use \ccxt\ExchangeError;
+use \ccxt\AuthenticationError;
+use \ccxt\AddressPending;
+use \ccxt\InvalidOrder;
+use \ccxt\OrderNotFound;
+use \ccxt\DDoSProtection;
 
 class bittrex extends Exchange {
 
     public function describe () {
-        return array_replace_recursive (parent::describe (), array (
+        return array_replace_recursive(parent::describe (), array(
             'id' => 'bittrex',
             'name' => 'Bittrex',
-            'countries' => array ( 'US' ),
+            'countries' => array( 'US' ),
             'version' => 'v1.1',
             'rateLimit' => 1500,
             'certified' => true,
+            'pro' => true,
             // new metainfo interface
-            'has' => array (
-                'CORS' => true,
-                'createMarketOrder' => false,
+            'has' => array(
+                'CORS' => false,
+                'createMarketOrder' => true,
                 'fetchDepositAddress' => true,
                 'fetchClosedOrders' => true,
                 'fetchCurrencies' => true,
@@ -34,7 +41,7 @@ class bittrex extends Exchange {
                 'fetchWithdrawals' => true,
                 'fetchTransactions' => false,
             ),
-            'timeframes' => array (
+            'timeframes' => array(
                 '1m' => 'oneMin',
                 '5m' => 'fiveMin',
                 '30m' => 'thirtyMin',
@@ -42,9 +49,9 @@ class bittrex extends Exchange {
                 '1d' => 'day',
             ),
             'hostname' => 'bittrex.com',
-            'urls' => array (
+            'urls' => array(
                 'logo' => 'https://user-images.githubusercontent.com/1294454/27766352-cf0b3c26-5ed5-11e7-82b7-f3826b7a97d8.jpg',
-                'api' => array (
+                'api' => array(
                     'public' => 'https://{hostname}/api',
                     'account' => 'https://{hostname}/api',
                     'market' => 'https://{hostname}/api',
@@ -53,19 +60,20 @@ class bittrex extends Exchange {
                     'v3public' => 'https://api.bittrex.com/v3',
                 ),
                 'www' => 'https://bittrex.com',
-                'doc' => array (
+                'doc' => array(
                     'https://bittrex.github.io/api/',
                     'https://bittrex.github.io/api/v3',
                     'https://www.npmjs.com/package/bittrex-node',
                 ),
-                'fees' => array (
+                'fees' => array(
                     'https://bittrex.zendesk.com/hc/en-us/articles/115003684371-BITTREX-SERVICE-FEES-AND-WITHDRAWAL-LIMITATIONS',
                     'https://bittrex.zendesk.com/hc/en-us/articles/115000199651-What-fees-does-Bittrex-charge-',
                 ),
+                'referral' => 'https://bittrex.com/Account/Register?referralCode=1ZE-G0G-M3B',
             ),
-            'api' => array (
-                'v3' => array (
-                    'get' => array (
+            'api' => array(
+                'v3' => array(
+                    'get' => array(
                         'account',
                         'addresses',
                         'addresses/{currencySymbol}',
@@ -88,19 +96,19 @@ class bittrex extends Exchange {
                         'withdrawals/ByTxId/{txId}',
                         'withdrawals/{withdrawalId}',
                     ),
-                    'post' => array (
+                    'post' => array(
                         'addresses',
                         'orders',
                         'subaccounts',
                         'withdrawals',
                     ),
-                    'delete' => array (
+                    'delete' => array(
                         'orders/{orderId}',
                         'withdrawals/{withdrawalId}',
                     ),
                 ),
-                'v3public' => array (
-                    'get' => array (
+                'v3public' => array(
+                    'get' => array(
                         'markets',
                         'markets/summaries',
                         'markets/{marketSymbol}',
@@ -111,17 +119,19 @@ class bittrex extends Exchange {
                         'markets/{marketSymbol}/candles',
                     ),
                 ),
-                'v2' => array (
-                    'get' => array (
+                'v2' => array(
+                    'get' => array(
                         'currencies/GetBTCPrice',
+                        'currencies/GetWalletHealth',
+                        'general/GetLatestAlert',
                         'market/GetTicks',
                         'market/GetLatestTick',
                         'Markets/GetMarketSummaries',
                         'market/GetLatestTick',
                     ),
                 ),
-                'public' => array (
-                    'get' => array (
+                'public' => array(
+                    'get' => array(
                         'currencies',
                         'markethistory',
                         'markets',
@@ -131,8 +141,8 @@ class bittrex extends Exchange {
                         'ticker',
                     ),
                 ),
-                'account' => array (
-                    'get' => array (
+                'account' => array(
+                    'get' => array(
                         'balance',
                         'balances',
                         'depositaddress',
@@ -144,8 +154,8 @@ class bittrex extends Exchange {
                         'withdraw',
                     ),
                 ),
-                'market' => array (
-                    'get' => array (
+                'market' => array(
+                    'get' => array(
                         'buylimit',
                         'buymarket',
                         'cancel',
@@ -155,17 +165,17 @@ class bittrex extends Exchange {
                     ),
                 ),
             ),
-            'fees' => array (
-                'trading' => array (
+            'fees' => array(
+                'trading' => array(
                     'tierBased' => false,
                     'percentage' => true,
                     'maker' => 0.0025,
                     'taker' => 0.0025,
                 ),
-                'funding' => array (
+                'funding' => array(
                     'tierBased' => false,
                     'percentage' => false,
-                    'withdraw' => array (
+                    'withdraw' => array(
                         'BTC' => 0.0005,
                         'LTC' => 0.01,
                         'DOGE' => 2,
@@ -183,7 +193,7 @@ class bittrex extends Exchange {
                         'SLR' => 0.2,
                         'GRS' => 0.2,
                     ),
-                    'deposit' => array (
+                    'deposit' => array(
                         'BTC' => 0,
                         'LTC' => 0,
                         'DOGE' => 0,
@@ -203,26 +213,36 @@ class bittrex extends Exchange {
                     ),
                 ),
             ),
-            'exceptions' => array (
-                // 'Call to Cancel was throttled. Try again in 60 seconds.' => '\\ccxt\\DDoSProtection',
-                // 'Call to GetBalances was throttled. Try again in 60 seconds.' => '\\ccxt\\DDoSProtection',
-                'APISIGN_NOT_PROVIDED' => '\\ccxt\\AuthenticationError',
-                'INVALID_SIGNATURE' => '\\ccxt\\AuthenticationError',
-                'INVALID_CURRENCY' => '\\ccxt\\ExchangeError',
-                'INVALID_PERMISSION' => '\\ccxt\\AuthenticationError',
-                'INSUFFICIENT_FUNDS' => '\\ccxt\\InsufficientFunds',
-                'QUANTITY_NOT_PROVIDED' => '\\ccxt\\InvalidOrder',
-                'MIN_TRADE_REQUIREMENT_NOT_MET' => '\\ccxt\\InvalidOrder',
-                'ORDER_NOT_OPEN' => '\\ccxt\\OrderNotFound',
-                'INVALID_ORDER' => '\\ccxt\\InvalidOrder',
-                'UUID_INVALID' => '\\ccxt\\OrderNotFound',
-                'RATE_NOT_PROVIDED' => '\\ccxt\\InvalidOrder', // createLimitBuyOrder ('ETH/BTC', 1, 0)
-                'WHITELIST_VIOLATION_IP' => '\\ccxt\\PermissionDenied',
-                'DUST_TRADE_DISALLOWED_MIN_VALUE' => '\\ccxt\\InvalidOrder',
-                'RESTRICTED_MARKET' => '\\ccxt\\BadSymbol',
-                'We are down for scheduled maintenance, but we\u2019ll be back up shortly.' => '\\ccxt\\OnMaintenance', // array("success":false,"message":"We are down for scheduled maintenance, but we\u2019ll be back up shortly.","result":null,"explanation":null)
+            'exceptions' => array(
+                'exact' => array(
+                    // 'Call to Cancel was throttled. Try again in 60 seconds.' => '\\ccxt\\DDoSProtection',
+                    // 'Call to GetBalances was throttled. Try again in 60 seconds.' => '\\ccxt\\DDoSProtection',
+                    'APISIGN_NOT_PROVIDED' => '\\ccxt\\AuthenticationError',
+                    'INVALID_SIGNATURE' => '\\ccxt\\AuthenticationError',
+                    'INVALID_CURRENCY' => '\\ccxt\\ExchangeError',
+                    'INVALID_PERMISSION' => '\\ccxt\\AuthenticationError',
+                    'INSUFFICIENT_FUNDS' => '\\ccxt\\InsufficientFunds',
+                    'INVALID_CEILING_MARKET_BUY' => '\\ccxt\\InvalidOrder',
+                    'INVALID_FIAT_ACCOUNT' => '\\ccxt\\InvalidOrder',
+                    'INVALID_ORDER_TYPE' => '\\ccxt\\InvalidOrder',
+                    'QUANTITY_NOT_PROVIDED' => '\\ccxt\\InvalidOrder',
+                    'MIN_TRADE_REQUIREMENT_NOT_MET' => '\\ccxt\\InvalidOrder',
+                    'ORDER_NOT_OPEN' => '\\ccxt\\OrderNotFound',
+                    'INVALID_ORDER' => '\\ccxt\\InvalidOrder',
+                    'UUID_INVALID' => '\\ccxt\\OrderNotFound',
+                    'RATE_NOT_PROVIDED' => '\\ccxt\\InvalidOrder', // createLimitBuyOrder ('ETH/BTC', 1, 0)
+                    'INVALID_MARKET' => '\\ccxt\\BadSymbol', // array("success":false,"message":"INVALID_MARKET","result":null,"explanation":null)
+                    'WHITELIST_VIOLATION_IP' => '\\ccxt\\PermissionDenied',
+                    'DUST_TRADE_DISALLOWED_MIN_VALUE' => '\\ccxt\\InvalidOrder',
+                    'RESTRICTED_MARKET' => '\\ccxt\\BadSymbol',
+                    'We are down for scheduled maintenance, but we\u2019ll be back up shortly.' => '\\ccxt\\OnMaintenance', // array("success":false,"message":"We are down for scheduled maintenance, but we\u2019ll be back up shortly.","result":null,"explanation":null)
+                ),
+                'broad' => array(
+                    'throttled' => '\\ccxt\\DDoSProtection',
+                    'problem' => '\\ccxt\\ExchangeNotAvailable',
+                ),
             ),
-            'options' => array (
+            'options' => array(
                 'parseOrderStatus' => false,
                 'hasAlreadyAuthenticatedSuccessfully' => false, // a workaround for APIKEY_INVALID
                 'symbolSeparator' => '-',
@@ -234,7 +254,7 @@ class bittrex extends Exchange {
                 // The base address identifies the exchange as the recipient
                 // while the tag identifies the user account within the exchange
                 // and the tag is retrieved with fetchDepositAddress.
-                'tag' => array (
+                'tag' => array(
                     'NXT' => true, // NXT, BURST
                     'CRYPTO_NOTE_PAYMENTID' => true, // AEON, XMR
                     'BITSHAREX' => true, // BTS
@@ -249,8 +269,9 @@ class bittrex extends Exchange {
                 // see the implementation of fetchClosedOrdersV3 below
                 'fetchClosedOrdersMethod' => 'fetch_closed_orders_v3',
                 'fetchClosedOrdersFilterBySince' => true,
+                // 'createOrderMethod' => 'create_order_v1',
             ),
-            'commonCurrencies' => array (
+            'commonCurrencies' => array(
                 'BITS' => 'SWIFT',
                 'CPC' => 'Capricoin',
             ),
@@ -268,8 +289,8 @@ class bittrex extends Exchange {
     public function fetch_markets ($params = array ()) {
         $response = $this->v3publicGetMarkets ($params);
         //
-        //     array (
-        //         array (
+        //     array(
+        //         array(
         //             "$symbol":"LTC-BTC",
         //             "baseCurrencySymbol":"LTC",
         //             "quoteCurrencySymbol":"BTC",
@@ -292,7 +313,7 @@ class bittrex extends Exchange {
         //
         $result = array();
         // $markets = $this->safe_value($response, 'result');
-        for ($i = 0; $i < count ($response); $i++) {
+        for ($i = 0; $i < count($response); $i++) {
             $market = $response[$i];
             $baseId = $this->safe_string($market, 'baseCurrencySymbol');
             $quoteId = $this->safe_string($market, 'quoteCurrencySymbol');
@@ -306,13 +327,13 @@ class bittrex extends Exchange {
             $quote = $this->safe_currency_code($quoteId);
             $symbol = $base . '/' . $quote;
             $pricePrecision = $this->safe_integer($market, 'precision', 8);
-            $precision = array (
+            $precision = array(
                 'amount' => 8,
                 'price' => $pricePrecision,
             );
             $status = $this->safe_string($market, 'status');
             $active = ($status === 'ONLINE');
-            $result[] = array (
+            $result[] = array(
                 'id' => $id,
                 'symbol' => $symbol,
                 'base' => $base,
@@ -322,12 +343,12 @@ class bittrex extends Exchange {
                 'active' => $active,
                 'info' => $market,
                 'precision' => $precision,
-                'limits' => array (
-                    'amount' => array (
+                'limits' => array(
+                    'amount' => array(
                         'min' => $this->safe_float($market, 'minTradeSize'),
                         'max' => null,
                     ),
-                    'price' => array (
+                    'price' => array(
                         'min' => pow(10, -$precision['price']),
                         'max' => null,
                     ),
@@ -344,7 +365,7 @@ class bittrex extends Exchange {
         $result = array( 'info' => $balances );
         $indexed = $this->index_by($balances, 'Currency');
         $currencyIds = is_array($indexed) ? array_keys($indexed) : array();
-        for ($i = 0; $i < count ($currencyIds); $i++) {
+        for ($i = 0; $i < count($currencyIds); $i++) {
             $currencyId = $currencyIds[$i];
             $code = $this->safe_currency_code($currencyId);
             $account = $this->account ();
@@ -358,20 +379,20 @@ class bittrex extends Exchange {
 
     public function fetch_order_book ($symbol, $limit = null, $params = array ()) {
         $this->load_markets();
-        $request = array (
+        $request = array(
             'market' => $this->market_id($symbol),
             'type' => 'both',
         );
-        $response = $this->publicGetOrderbook (array_merge ($request, $params));
+        $response = $this->publicGetOrderbook (array_merge($request, $params));
         $orderbook = $response['result'];
         if (is_array($params) && array_key_exists('type', $params)) {
             if ($params['type'] === 'buy') {
-                $orderbook = array (
+                $orderbook = array(
                     'buy' => $response['result'],
                     'sell' => array(),
                 );
             } else if ($params['type'] === 'sell') {
-                $orderbook = array (
+                $orderbook = array(
                     'buy' => array(),
                     'sell' => $response['result'],
                 );
@@ -386,8 +407,8 @@ class bittrex extends Exchange {
         //     {
         //         "success" => true,
         //         "message" => "",
-        //         "$result" => array (
-        //             array (
+        //         "$result" => array(
+        //             array(
         //                 "Currency" => "BTC",
         //                 "CurrencyLong":"Bitcoin",
         //                 "MinConfirmation":2,
@@ -404,40 +425,37 @@ class bittrex extends Exchange {
         //
         $currencies = $this->safe_value($response, 'result', array());
         $result = array();
-        for ($i = 0; $i < count ($currencies); $i++) {
+        for ($i = 0; $i < count($currencies); $i++) {
             $currency = $currencies[$i];
             $id = $this->safe_string($currency, 'Currency');
-            // todo => will need to rethink the fees
-            // to add support for multiple withdrawal/deposit methods and
-            // differentiated fees for each particular method
             $code = $this->safe_currency_code($id);
             $precision = 8; // default $precision, todo => fix "magic constants"
             $address = $this->safe_value($currency, 'BaseAddress');
             $fee = $this->safe_float($currency, 'TxFee'); // todo => redesign
-            $result[$code] = array (
+            $result[$code] = array(
                 'id' => $id,
                 'code' => $code,
                 'address' => $address,
                 'info' => $currency,
-                'type' => $currency['CoinType'],
-                'name' => $currency['CurrencyLong'],
-                'active' => $currency['IsActive'],
+                'type' => $this->safe_string($currency, 'CoinType'),
+                'name' => $this->safe_string($currency, 'CurrencyLong'),
+                'active' => $this->safe_value($currency, 'IsActive'),
                 'fee' => $fee,
                 'precision' => $precision,
-                'limits' => array (
-                    'amount' => array (
+                'limits' => array(
+                    'amount' => array(
                         'min' => pow(10, -$precision),
                         'max' => null,
                     ),
-                    'price' => array (
+                    'price' => array(
                         'min' => pow(10, -$precision),
                         'max' => null,
                     ),
-                    'cost' => array (
+                    'cost' => array(
                         'min' => null,
                         'max' => null,
                     ),
-                    'withdraw' => array (
+                    'withdraw' => array(
                         'min' => $fee,
                         'max' => null,
                     ),
@@ -472,7 +490,7 @@ class bittrex extends Exchange {
             if (is_array($this->markets_by_id) && array_key_exists($marketId, $this->markets_by_id)) {
                 $market = $this->markets_by_id[$marketId];
             } else {
-                $symbol = $this->parse_symbol ($marketId);
+                $symbol = $this->parse_symbol($marketId);
             }
         }
         if (($symbol === null) && ($market !== null)) {
@@ -490,7 +508,7 @@ class bittrex extends Exchange {
                 }
             }
         }
-        return array (
+        return array(
             'symbol' => $symbol,
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601 ($timestamp),
@@ -519,7 +537,7 @@ class bittrex extends Exchange {
         $response = $this->publicGetMarketsummaries ($params);
         $result = $this->safe_value($response, 'result');
         $tickers = array();
-        for ($i = 0; $i < count ($result); $i++) {
+        for ($i = 0; $i < count($result); $i++) {
             $ticker = $this->parse_ticker($result[$i]);
             $tickers[] = $ticker;
         }
@@ -529,15 +547,15 @@ class bittrex extends Exchange {
     public function fetch_ticker ($symbol, $params = array ()) {
         $this->load_markets();
         $market = $this->market ($symbol);
-        $request = array (
+        $request = array(
             'market' => $market['id'],
         );
-        $response = $this->publicGetMarketsummary (array_merge ($request, $params));
+        $response = $this->publicGetMarketsummary (array_merge($request, $params));
         //
         //     {
         //         "success":true,
         //         "message":"",
-        //         "result":array (
+        //         "result":array(
         //             {
         //                 "MarketName":"BTC-ETH",
         //                 "High":0.02127099,
@@ -581,7 +599,7 @@ class bittrex extends Exchange {
                 $cost = $price * $amount;
             }
         }
-        return array (
+        return array(
             'info' => $trade,
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601 ($timestamp),
@@ -601,10 +619,10 @@ class bittrex extends Exchange {
     public function fetch_trades ($symbol, $since = null, $limit = null, $params = array ()) {
         $this->load_markets();
         $market = $this->market ($symbol);
-        $request = array (
+        $request = array(
             'market' => $market['id'],
         );
-        $response = $this->publicGetMarkethistory (array_merge ($request, $params));
+        $response = $this->publicGetMarkethistory (array_merge($request, $params));
         if (is_array($response) && array_key_exists('result', $response)) {
             if ($response['result'] !== null) {
                 return $this->parse_trades($response['result'], $market, $since, $limit);
@@ -628,11 +646,11 @@ class bittrex extends Exchange {
     public function fetch_ohlcv ($symbol, $timeframe = '1m', $since = null, $limit = null, $params = array ()) {
         $this->load_markets();
         $market = $this->market ($symbol);
-        $request = array (
+        $request = array(
             'tickInterval' => $this->timeframes[$timeframe],
             'marketName' => $market['id'],
         );
-        $response = $this->v2GetMarketGetTicks (array_merge ($request, $params));
+        $response = $this->v2GetMarketGetTicks (array_merge($request, $params));
         if (is_array($response) && array_key_exists('result', $response)) {
             if ($response['result']) {
                 return $this->parse_ohlcvs($response['result'], $market, $timeframe, $since, $limit);
@@ -648,30 +666,96 @@ class bittrex extends Exchange {
             $market = $this->market ($symbol);
             $request['market'] = $market['id'];
         }
-        $response = $this->marketGetOpenorders (array_merge ($request, $params));
+        $response = $this->marketGetOpenorders (array_merge($request, $params));
         $result = $this->safe_value($response, 'result', array());
         $orders = $this->parse_orders($result, $market, $since, $limit);
         return $this->filter_by_symbol($orders, $symbol);
     }
 
     public function create_order ($symbol, $type, $side, $amount, $price = null, $params = array ()) {
+        $uppercaseType = strtoupper($type);
+        $isMarket = ($uppercaseType === 'MARKET');
+        $isCeilingLimit = ($uppercaseType === 'CEILING_LIMIT');
+        $isCeilingMarket = ($uppercaseType === 'CEILING_MARKET');
+        $isV3 = $isMarket || $isCeilingLimit || $isCeilingMarket;
+        $defaultMethod = $isV3 ? 'create_order_v3' : 'create_order_v1';
+        $method = $this->safe_value($this->options, 'createOrderMethod', $defaultMethod);
+        return $this->$method ($symbol, $type, $side, $amount, $price, $params);
+    }
+
+    public function create_order_v3 ($symbol, $type, $side, $amount, $price = null, $params = array ()) {
+        // A ceiling order is a $market or limit order that allows you to specify
+        // the $amount of quote currency you want to spend (or receive, if selling)
+        // instead of the quantity of the $market currency (e.g. buy $100 USD of BTC
+        // at the current $market BTC $price)
+        $this->load_markets();
+        $market = $this->market ($symbol);
+        $uppercaseType = strtoupper($type);
+        $reverseId = $market['baseId'] . '-' . $market['quoteId'];
+        $request = array(
+            'marketSymbol' => $reverseId,
+            'direction' => strtoupper($side),
+            'type' => $uppercaseType, // LIMIT, MARKET, CEILING_LIMIT, CEILING_MARKET
+            // 'quantity' => $this->amount_to_precision($symbol, $amount), // required for limit orders, excluded for ceiling orders
+            // 'ceiling' => $this->price_to_precision($symbol, $price), // required for ceiling orders, excluded for non-ceiling orders
+            // 'limit' => $this->price_to_precision($symbol, $price), // required for limit orders, excluded for $market orders
+            // 'timeInForce' => 'GOOD_TIL_CANCELLED', // IMMEDIATE_OR_CANCEL, FILL_OR_KILL, POST_ONLY_GOOD_TIL_CANCELLED
+            // 'useAwards' => false, // optional
+        );
+        $isCeilingLimit = ($uppercaseType === 'CEILING_LIMIT');
+        $isCeilingMarket = ($uppercaseType === 'CEILING_MARKET');
+        $isCeilingOrder = $isCeilingLimit || $isCeilingMarket;
+        if ($isCeilingOrder) {
+            $request['ceiling'] = $this->price_to_precision($symbol, $price);
+            $request['timeInForce'] = 'IMMEDIATE_OR_CANCEL';
+        } else {
+            $request['quantity'] = $this->amount_to_precision($symbol, $amount);
+            if ($uppercaseType === 'LIMIT') {
+                $request['limit'] = $this->price_to_precision($symbol, $price);
+                $request['timeInForce'] = 'GOOD_TIL_CANCELLED';
+            } else {
+                $request['timeInForce'] = 'FILL_OR_KILL';
+            }
+        }
+        $response = $this->v3PostOrders (array_merge($request, $params));
+        //
+        //     {
+        //         id => 'f03d5e98-b5ac-48fb-8647-dd4db828a297',
+        //         marketSymbol => 'BTC-USDT',
+        //         direction => 'SELL',
+        //         $type => 'LIMIT',
+        //         quantity => '0.01',
+        //         limit => '6000',
+        //         timeInForce => 'GOOD_TIL_CANCELLED',
+        //         fillQuantity => '0.00000000',
+        //         commission => '0.00000000',
+        //         proceeds => '0.00000000',
+        //         status => 'OPEN',
+        //         createdAt => '2020-03-18T02:37:33.42Z',
+        //         updatedAt => '2020-03-18T02:37:33.42Z'
+        //       }
+        //
+        return $this->parse_order_v3($response, $market);
+    }
+
+    public function create_order_v1 ($symbol, $type, $side, $amount, $price = null, $params = array ()) {
         if ($type !== 'limit') {
             throw new ExchangeError($this->id . ' allows limit orders only');
         }
         $this->load_markets();
         $market = $this->market ($symbol);
         $method = 'marketGet' . $this->capitalize ($side) . $type;
-        $request = array (
+        $request = array(
             'market' => $market['id'],
             'quantity' => $this->amount_to_precision($symbol, $amount),
             'rate' => $this->price_to_precision($symbol, $price),
         );
         // if ($type == 'limit')
         //     order['rate'] = $this->price_to_precision($symbol, $price);
-        $response = $this->$method (array_merge ($request, $params));
-        $orderIdField = $this->get_order_id_field ();
+        $response = $this->$method (array_merge($request, $params));
+        $orderIdField = $this->get_order_id_field();
         $orderId = $this->safe_string($response['result'], $orderIdField);
-        return array (
+        return array(
             'info' => $response,
             'id' => $orderId,
             'symbol' => $symbol,
@@ -687,20 +771,23 @@ class bittrex extends Exchange {
 
     public function cancel_order ($id, $symbol = null, $params = array ()) {
         $this->load_markets();
-        $orderIdField = $this->get_order_id_field ();
+        $orderIdField = $this->get_order_id_field();
         $request = array();
         $request[$orderIdField] = $id;
-        $response = $this->marketGetCancel (array_merge ($request, $params));
+        $response = $this->marketGetCancel (array_merge($request, $params));
         //
         //     {
         //         "success" => true,
         //         "message" => "''",
-        //         "result" => {
+        //         "$result" => {
         //             "uuid" => "614c34e4-8d71-11e3-94b5-425861b86ab6"
         //         }
         //     }
         //
-        return array_merge ($this->parse_order($response), array (
+        $result = $this->safe_value($response, 'result', array());
+        return array_merge($this->parse_order($result), array(
+            'id' => $id,
+            'info' => $response,
             'status' => 'canceled',
         ));
     }
@@ -714,11 +801,11 @@ class bittrex extends Exchange {
             $currency = $this->currency ($code);
             $request['currency'] = $currency['id'];
         }
-        $response = $this->accountGetDeposithistory (array_merge ($request, $params));
+        $response = $this->accountGetDeposithistory (array_merge($request, $params));
         //
         //     { success =>    true,
         //       message =>   "",
-        //        result => array ( {            Id =>  22578097,
+        //        result => array( {            Id =>  22578097,
         //                           Amount =>  0.3,
         //                         Currency => "ETH",
         //                    Confirmations =>  15,
@@ -741,12 +828,12 @@ class bittrex extends Exchange {
             $currency = $this->currency ($code);
             $request['currency'] = $currency['id'];
         }
-        $response = $this->accountGetWithdrawalhistory (array_merge ($request, $params));
+        $response = $this->accountGetWithdrawalhistory (array_merge($request, $params));
         //
         //     {
         //         "success" : true,
         //         "message" : "",
-        //         "result" : [array (
+        //         "result" : [array(
         //                 "PaymentUuid" : "b32c7a5c-90c6-4c6e-835c-e16df12708b1",
         //                 "Currency" : "BTC",
         //                 "Amount" : 17.00000000,
@@ -852,7 +939,7 @@ class bittrex extends Exchange {
                 $feeCost = 0; // FIXME => remove hardcoded value that may change any time
             }
         }
-        return array (
+        return array(
             'info' => $transaction,
             'id' => $id,
             'currency' => $code,
@@ -865,7 +952,7 @@ class bittrex extends Exchange {
             'txid' => $txid,
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601 ($timestamp),
-            'fee' => array (
+            'fee' => array(
                 'currency' => $code,
                 'cost' => $feeCost,
             ),
@@ -881,9 +968,9 @@ class bittrex extends Exchange {
 
     public function parse_order ($order, $market = null) {
         if (is_array($order) && array_key_exists('marketSymbol', $order)) {
-            return $this->parse_order_v3 ($order, $market);
+            return $this->parse_order_v3($order, $market);
         } else {
-            return $this->parse_order_v2 ($order, $market);
+            return $this->parse_order_v2($order, $market);
         }
     }
 
@@ -896,7 +983,7 @@ class bittrex extends Exchange {
     }
 
     public function parse_order_status ($status) {
-        $statuses = array (
+        $statuses = array(
             'CLOSED' => 'closed',
             'OPEN' => 'open',
             'CANCELLED' => 'canceled',
@@ -966,7 +1053,7 @@ class bittrex extends Exchange {
                 $remaining = $quantity - $fillQuantity;
             }
         }
-        return array (
+        return array(
             'id' => $this->safe_string($order, 'id'),
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601 ($timestamp),
@@ -981,7 +1068,7 @@ class bittrex extends Exchange {
             'filled' => $fillQuantity,
             'remaining' => $remaining,
             'status' => $status,
-            'fee' => array (
+            'fee' => array(
                 'cost' => $commission,
                 'currency' => $feeCurrency,
             ),
@@ -1041,7 +1128,7 @@ class bittrex extends Exchange {
                     $market = $this->markets_by_id[$marketId];
                     $symbol = $market['symbol'];
                 } else {
-                    $symbol = $this->parse_symbol ($marketId);
+                    $symbol = $this->parse_symbol($marketId);
                 }
             }
         } else {
@@ -1073,7 +1160,7 @@ class bittrex extends Exchange {
         $fee = null;
         $feeCost = $this->safe_float_2($order, 'Commission', 'CommissionPaid');
         if ($feeCost !== null) {
-            $fee = array (
+            $fee = array(
                 'cost' => $feeCost,
             );
             if ($market !== null) {
@@ -1107,7 +1194,7 @@ class bittrex extends Exchange {
         }
         $average = $this->safe_float($order, 'PricePerUnit');
         $id = $this->safe_string_2($order, 'OrderUuid', 'OrderId');
-        return array (
+        return array(
             'info' => $order,
             'id' => $id,
             'timestamp' => $timestamp,
@@ -1131,10 +1218,10 @@ class bittrex extends Exchange {
         $this->load_markets();
         $response = null;
         try {
-            $orderIdField = $this->get_order_id_field ();
+            $orderIdField = $this->get_order_id_field();
             $request = array();
             $request[$orderIdField] = $id;
-            $response = $this->accountGetOrder (array_merge ($request, $params));
+            $response = $this->accountGetOrder (array_merge($request, $params));
         } catch (Exception $e) {
             if ($this->last_json_response) {
                 $message = $this->safe_string($this->last_json_response, 'message');
@@ -1153,7 +1240,7 @@ class bittrex extends Exchange {
     public function order_to_trade ($order) {
         // this entire method should be moved to the base class
         $timestamp = $this->safe_integer_2($order, 'lastTradeTimestamp', 'timestamp');
-        return array (
+        return array(
             'id' => $this->safe_string($order, 'id'),
             'side' => $this->safe_string($order, 'side'),
             'order' => $this->safe_string($order, 'id'),
@@ -1172,15 +1259,15 @@ class bittrex extends Exchange {
     public function orders_to_trades ($orders) {
         // this entire method should be moved to the base class
         $result = array();
-        for ($i = 0; $i < count ($orders); $i++) {
-            $result[] = $this->order_to_trade ($orders[$i]);
+        for ($i = 0; $i < count($orders); $i++) {
+            $result[] = $this->order_to_trade($orders[$i]);
         }
         return $result;
     }
 
     public function fetch_my_trades ($symbol = null, $since = null, $limit = null, $params = array ()) {
-        $orders = $this->fetch_closed_orders ($symbol, $since, $limit, $params);
-        return $this->orders_to_trades ($orders);
+        $orders = $this->fetch_closed_orders($symbol, $since, $limit, $params);
+        return $this->orders_to_trades($orders);
     }
 
     public function fetch_closed_orders ($symbol = null, $since = null, $limit = null, $params = array ()) {
@@ -1196,7 +1283,7 @@ class bittrex extends Exchange {
             $market = $this->market ($symbol);
             $request['market'] = $market['id'];
         }
-        $response = $this->accountGetOrderhistory (array_merge ($request, $params));
+        $response = $this->accountGetOrderhistory (array_merge($request, $params));
         $result = $this->safe_value($response, 'result', array());
         $orders = $this->parse_orders($result, $market, $since, $limit);
         if ($symbol !== null) {
@@ -1226,7 +1313,7 @@ class bittrex extends Exchange {
             // https://github.com/ccxt/ccxt/pull/5219#issuecomment-499646209
             $request['marketSymbol'] = $market['base'] . '-' . $market['quote'];
         }
-        $response = $this->v3GetOrdersClosed (array_merge ($request, $params));
+        $response = $this->v3GetOrdersClosed (array_merge($request, $params));
         $orders = $this->parse_orders($response, $market, $since, $limit);
         if ($symbol !== null) {
             return $this->filter_by_symbol($orders, $symbol);
@@ -1237,10 +1324,10 @@ class bittrex extends Exchange {
     public function fetch_deposit_address ($code, $params = array ()) {
         $this->load_markets();
         $currency = $this->currency ($code);
-        $request = array (
+        $request = array(
             'currency' => $currency['id'],
         );
-        $response = $this->accountGetDepositaddress (array_merge ($request, $params));
+        $response = $this->accountGetDepositaddress (array_merge($request, $params));
         //
         //     array( "success" => false, "$message" => "ADDRESS_GENERATING", "result" => null )
         //
@@ -1260,7 +1347,7 @@ class bittrex extends Exchange {
             $address = $currency['address'];
         }
         $this->check_address($address);
-        return array (
+        return array(
             'currency' => $code,
             'address' => $address,
             'tag' => $tag,
@@ -1272,7 +1359,7 @@ class bittrex extends Exchange {
         $this->check_address($address);
         $this->load_markets();
         $currency = $this->currency ($code);
-        $request = array (
+        $request = array(
             'currency' => $currency['id'],
             'quantity' => $amount,
             'address' => $address,
@@ -1280,17 +1367,17 @@ class bittrex extends Exchange {
         if ($tag !== null) {
             $request['paymentid'] = $tag;
         }
-        $response = $this->accountGetWithdraw (array_merge ($request, $params));
+        $response = $this->accountGetWithdraw (array_merge($request, $params));
         $result = $this->safe_value($response, 'result', array());
         $id = $this->safe_string($result, 'uuid');
-        return array (
+        return array(
             'info' => $response,
             'id' => $id,
         );
     }
 
     public function sign ($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
-        $url = $this->implode_params($this->urls['api'][$api], array (
+        $url = $this->implode_params($this->urls['api'][$api], array(
             'hostname' => $this->hostname,
         )) . '/';
         if ($api !== 'v2' && $api !== 'v3' && $api !== 'v3public') {
@@ -1313,10 +1400,16 @@ class bittrex extends Exchange {
             }
         } else if ($api === 'v3') {
             $url .= $path;
-            if ($params) {
-                $url .= '?' . $this->rawencode ($params);
+            $hashString = '';
+            if ($method === 'POST') {
+                $body = $this->json ($params);
+                $hashString = $body;
+            } else {
+                if ($params) {
+                    $url .= '?' . $this->rawencode ($params);
+                }
             }
-            $contentHash = $this->hash ($this->encode (''), 'sha512', 'hex');
+            $contentHash = $this->hash ($this->encode ($hashString), 'sha512', 'hex');
             $timestamp = (string) $this->milliseconds ();
             $auth = $timestamp . $url . $method . $contentHash;
             $subaccountId = $this->safe_value($this->options, 'subaccountId');
@@ -1324,7 +1417,7 @@ class bittrex extends Exchange {
                 $auth .= $subaccountId;
             }
             $signature = $this->hmac ($this->encode ($auth), $this->encode ($this->secret), 'sha512');
-            $headers = array (
+            $headers = array(
                 'Api-Key' => $this->apiKey,
                 'Api-Timestamp' => $timestamp,
                 'Api-Content-Hash' => $contentHash,
@@ -1333,20 +1426,23 @@ class bittrex extends Exchange {
             if ($subaccountId !== null) {
                 $headers['Api-Subaccount-Id'] = $subaccountId;
             }
+            if ($method === 'POST') {
+                $headers['Content-Type'] = 'application/json';
+            }
         } else {
             $this->check_required_credentials();
             $url .= $api . '/';
             if ((($api === 'account') && ($path !== 'withdraw')) || ($path === 'openorders')) {
                 $url .= strtolower($method);
             }
-            $request = array (
+            $request = array(
                 'apikey' => $this->apiKey,
             );
             $disableNonce = $this->safe_value($this->options, 'disableNonce');
             if (($disableNonce === null) || !$disableNonce) {
                 $request['nonce'] = $this->nonce ();
             }
-            $url .= $path . '?' . $this->urlencode (array_merge ($request, $params));
+            $url .= $path . '?' . $this->urlencode (array_merge($request, $params));
             $signature = $this->hmac ($this->encode ($url), $this->encode ($this->secret), 'sha512');
             $headers = array( 'apisign' => $signature );
         }
@@ -1361,17 +1457,25 @@ class bittrex extends Exchange {
         //     array( $success => false, $message => "$message" )
         //
         if ($body[0] === '{') {
+            $feedback = $this->id . ' ' . $body;
             $success = $this->safe_value($response, 'success');
             if ($success === null) {
-                throw new ExchangeError($this->id . ' => malformed $response => ' . $this->json ($response));
+                $code = $this->safe_string($response, 'code');
+                if ($code !== null) {
+                    $this->throw_exactly_matched_exception($this->exceptions['exact'], $code, $feedback);
+                    if ($code !== null) {
+                        $this->throw_broadly_matched_exception($this->exceptions['broad'], $code, $feedback);
+                    }
+                }
+                // throw new ExchangeError($this->id . ' malformed $response ' . $this->json ($response));
+                return;
             }
-            if (gettype ($success) === 'string') {
+            if (gettype($success) === 'string') {
                 // bleutrade uses string instead of boolean
                 $success = ($success === 'true') ? true : false;
             }
             if (!$success) {
                 $message = $this->safe_string($response, 'message');
-                $feedback = $this->id . ' ' . $body;
                 if ($message === 'APIKEY_INVALID') {
                     if ($this->options['hasAlreadyAuthenticatedSuccessfully']) {
                         throw new DDoSProtection($feedback);
@@ -1394,11 +1498,11 @@ class bittrex extends Exchange {
                     $indexOfCancel = mb_strpos($url, $cancel);
                     if ($indexOfCancel >= 0) {
                         $urlParts = explode('?', $url);
-                        $numParts = is_array ($urlParts) ? count ($urlParts) : 0;
+                        $numParts = is_array($urlParts) ? count($urlParts) : 0;
                         if ($numParts > 1) {
                             $query = $urlParts[1];
                             $params = explode('&', $query);
-                            $numParams = is_array ($params) ? count ($params) : 0;
+                            $numParams = is_array($params) ? count($params) : 0;
                             $orderId = null;
                             for ($i = 0; $i < $numParams; $i++) {
                                 $param = $params[$i];
@@ -1416,14 +1520,9 @@ class bittrex extends Exchange {
                         }
                     }
                 }
-                $this->throw_exactly_matched_exception($this->exceptions, $message, $feedback);
+                $this->throw_exactly_matched_exception($this->exceptions['exact'], $message, $feedback);
                 if ($message !== null) {
-                    if (mb_strpos($message, 'throttled. Try again') !== false) {
-                        throw new DDoSProtection($feedback);
-                    }
-                    if (mb_strpos($message, 'problem') !== false) {
-                        throw new ExchangeNotAvailable($feedback); // 'There was a problem processing your request.  If this problem persists, please contact...')
-                    }
+                    $this->throw_broadly_matched_exception($this->exceptions['broad'], $message, $feedback);
                 }
                 throw new ExchangeError($feedback);
             }

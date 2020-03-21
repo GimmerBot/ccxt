@@ -102,6 +102,7 @@ class bytetrade(Exchange):
                 },
             },
             'commonCurrencies': {
+                '44': 'ByteHub',
                 '48': 'Blocktonic',
             },
             'exceptions': {
@@ -220,6 +221,9 @@ class bytetrade(Exchange):
             id = self.safe_string(market, 'symbol')
             base = self.safe_string(market, 'baseName')
             quote = self.safe_string(market, 'quoteName')
+            normalBase = base.split('@')[0]
+            normalQuote = quote.split('@')[0]
+            normalSymbol = normalBase + '/' + normalQuote
             baseId = self.safe_string(market, 'base')
             quoteId = self.safe_string(market, 'quote')
             if baseId in self.commonCurrencies:
@@ -232,9 +236,6 @@ class bytetrade(Exchange):
             price = self.safe_value(limits, 'price', {})
             precision = self.safe_value(market, 'precision', {})
             active = self.safe_string(market, 'active')
-            normalBase = base.split('@')[0]
-            normalQuote = quote.split('@')[0]
-            normalSymbol = normalBase + '/' + normalQuote
             entry = {
                 'id': id,
                 'symbol': symbol,
@@ -543,22 +544,24 @@ class bytetrade(Exchange):
             typeNum = 1
         else:
             typeNum = 2
+            price = 0
         normalSymbol = market['normalSymbol']
         baseId = market['baseId']
         baseCurrency = self.currency(market['base'])
         amountTruncated = self.amount_to_precision(symbol, amount)
-        amountChain = self.toWei(amountTruncated, 'ether', baseCurrency['precision']['amount'])
+        amountChain = self.toWei(amountTruncated, baseCurrency['precision']['amount'])
         quoteId = market['quoteId']
         quoteCurrency = self.currency(market['quote'])
         priceRounded = self.price_to_precision(symbol, price)
-        priceChain = self.toWei(priceRounded, 'ether', quoteCurrency['precision']['amount'])
+        priceChain = self.toWei(priceRounded, quoteCurrency['precision']['amount'])
         now = self.milliseconds()
         expiration = self.milliseconds()
         datetime = self.iso8601(now)
         datetime = datetime.split('.')[0]
         expirationDatetime = self.iso8601(expiration)
         expirationDatetime = expirationDatetime.split('.')[0]
-        chainName = 'Sagittarius'
+        defaultDappId = 'Sagittarius'
+        dappId = self.safe_string(params, 'dappId', defaultDappId)
         defaultFee = self.safe_string(self.options, 'fee', '300000000000000')
         fee = self.safe_string(params, 'fee', defaultFee)
         eightBytes = self.integer_pow('2', '64')
@@ -589,8 +592,8 @@ class bytetrade(Exchange):
             self.numberToLE(int(baseId), 4),
             self.numberToLE(0, 1),
             self.numberToLE(1, 1),
-            self.numberToLE(len(chainName), 1),
-            self.encode(chainName),
+            self.numberToLE(len(dappId), 1),
+            self.encode(dappId),
             self.numberToLE(0, 1),
         ]
         txByteStringArray = [
@@ -619,8 +622,8 @@ class bytetrade(Exchange):
             self.numberToLE(int(baseId), 4),
             self.numberToLE(0, 1),
             self.numberToLE(1, 1),
-            self.numberToLE(len(chainName), 1),
-            self.encode(chainName),
+            self.numberToLE(len(dappId), 1),
+            self.encode(dappId),
             self.numberToLE(0, 1),
         ]
         txbytestring = self.binary_concat_array(txByteStringArray)
@@ -663,7 +666,7 @@ class bytetrade(Exchange):
                 ],
             ],
             'validate_type': 0,
-            'dapp': 'Sagittarius',
+            'dapp': dappId,
             'signatures': [
                 mySignature,
             ],
@@ -774,7 +777,8 @@ class bytetrade(Exchange):
         datetime = datetime.split('.')[0]
         expirationDatetime = self.iso8601(expiration)
         expirationDatetime = expirationDatetime.split('.')[0]
-        chainName = 'Sagittarius'
+        defaultDappId = 'Sagittarius'
+        dappId = self.safe_string(params, 'dappId', defaultDappId)
         byteStringArray = [
             self.numberToBE(1, 32),
             self.numberToLE(int(math.floor(now / 1000)), 4),
@@ -793,8 +797,8 @@ class bytetrade(Exchange):
             self.numberToLE(int(baseId), 4),
             self.numberToLE(0, 1),
             self.numberToLE(1, 1),
-            self.numberToLE(len(chainName), 1),
-            self.encode(chainName),
+            self.numberToLE(len(dappId), 1),
+            self.encode(dappId),
             self.numberToLE(0, 1),
         ]
         bytestring = self.binary_concat_array(byteStringArray)
@@ -820,7 +824,7 @@ class bytetrade(Exchange):
                 ],
             ],
             'validate_type': 0,
-            'dapp': 'Sagittarius',
+            'dapp': dappId,
             'signatures': [
                 mySignature,
             ],
@@ -851,14 +855,14 @@ class bytetrade(Exchange):
             'fee': None,
         }
 
-    async def transfer(self, code, amount, address, params={}):
+    async def transfer(self, code, amount, address, message='', params={}):
         self.check_required_dependencies()
         if self.apiKey is None:
             raise ArgumentsRequired('transfer requires self.apiKey')
         await self.load_markets()
         currency = self.currency(code)
         amountTruncate = self.decimal_to_precision(amount, TRUNCATE, currency['info']['transferPrecision'], DECIMAL_PLACES, NO_PADDING)
-        amountChain = self.toWei(amountTruncate, 'ether', currency['precision']['amount'])
+        amountChain = self.toWei(amountTruncate, currency['precision']['amount'])
         assetType = int(currency['id'])
         now = self.milliseconds()
         expiration = now
@@ -867,7 +871,8 @@ class bytetrade(Exchange):
         expirationDatetime = self.iso8601(expiration)
         expirationDatetime = expirationDatetime.split('.')[0]
         feeAmount = '300000000000000'
-        chainName = 'Sagittarius'
+        defaultDappId = 'Sagittarius'
+        dappId = self.safe_string(params, 'dappId', defaultDappId)
         eightBytes = self.integer_pow('2', '64')
         byteStringArray = [
             self.numberToBE(1, 32),
@@ -875,7 +880,7 @@ class bytetrade(Exchange):
             self.numberToLE(1, 1),
             self.numberToLE(int(math.floor(expiration / 1000)), 4),
             self.numberToLE(1, 1),
-            self.numberToLE(0, 1),
+            self.numberToLE(28, 1),
             self.numberToLE(0, 8),
             self.numberToLE(feeAmount, 8),  # string for 32 bit php
             self.numberToLE(len(self.apiKey), 1),
@@ -885,10 +890,13 @@ class bytetrade(Exchange):
             self.numberToLE(assetType, 4),
             self.numberToLE(self.integer_divide(amountChain, eightBytes), 8),
             self.numberToLE(self.integer_modulo(amountChain, eightBytes), 8),
+            self.numberToLE(1, 1),
+            self.numberToLE(len(message), 1),
+            self.encode(message),
             self.numberToLE(0, 1),
             self.numberToLE(1, 1),
-            self.numberToLE(len(chainName), 1),
-            self.encode(chainName),
+            self.numberToLE(len(dappId), 1),
+            self.encode(dappId),
             self.numberToLE(0, 1),
         ]
         bytestring = self.binary_concat_array(byteStringArray)
@@ -902,18 +910,19 @@ class bytetrade(Exchange):
             'to': address,
             'asset_type': int(currency['id']),
             'amount': str(amountChain),
+            'message': message,
         }
         fatty = {
             'timestamp': datetime,
             'expiration': expirationDatetime,
             'operations': [
                 [
-                    0,
+                    28,
                     operation,
                 ],
             ],
             'validate_type': 0,
-            'dapp': 'Sagittarius',
+            'dapp': dappId,
             'signatures': [
                 mySignature,
             ],
@@ -1066,7 +1075,7 @@ class bytetrade(Exchange):
         }
         response = await self.publicGetDepositaddress(request)
         address = self.safe_string(response[0], 'address')
-        tag = self.safe_string(response[0], 'addressTag')
+        tag = self.safe_string(response[0], 'tag')
         chainType = self.safe_string(response[0], 'chainType')
         self.check_address(address)
         return {
@@ -1084,37 +1093,33 @@ class bytetrade(Exchange):
         if self.apiKey is None:
             raise ArgumentsRequired('withdraw requires self.apiKey')
         addressResponse = await self.fetch_deposit_address(code)
-        middleAddress = self.safe_string(addressResponse, 'address')
         chainTypeString = self.safe_string(addressResponse, 'chainType')
-        chainType = 0
-        operationId = 18
-        if chainTypeString == 'ethereum':
-            chainType = 1
-        elif chainTypeString == 'bitcoin':
-            chainType = 2
-            operationId = 26
-        elif chainTypeString == 'cmt':
-            chainType = 3
-        elif chainTypeString == 'naka':
-            chainType = 4
+        chainId = self.safe_string(addressResponse['info'][0], 'chainId')
+        middleAddress = ''
+        if chainTypeString == 'eos':
+            middleAddress = address
         else:
-            raise ExchangeError(self.id + ' ' + code + ' is not supported.')
+            middleAddress = self.safe_string(addressResponse, 'address')
+        operationId = 18
+        if chainTypeString != 'ethereum' and chainTypeString != 'etc' and chainTypeString != 'eos' and chainTypeString != 'cmt' and chainTypeString != 'naka':
+            operationId = 26
         now = self.milliseconds()
         expiration = 0
         datetime = self.iso8601(now)
         datetime = datetime.split('.')[0]
         expirationDatetime = self.iso8601(expiration)
         expirationDatetime = expirationDatetime.split('.')[0]
-        chainName = 'Sagittarius'
+        defaultDappId = 'Sagittarius'
+        dappId = self.safe_string(params, 'dappId', defaultDappId)
         feeAmount = '300000000000000'
         currency = self.currency(code)
         coinId = currency['id']
         amountTruncate = self.decimal_to_precision(amount, TRUNCATE, currency['info']['transferPrecision'], DECIMAL_PLACES, NO_PADDING)
-        amountChain = self.toWei(amountTruncate, 'ether', currency['info']['externalPrecision'])
+        amountChain = self.toWei(amountTruncate, currency['info']['externalPrecision'])
         eightBytes = self.integer_pow('2', '64')
         assetFee = 0
         byteStringArray = []
-        if chainTypeString == 'bitcoin':
+        if operationId == 26:
             assetFee = currency['info']['fee']
             byteStringArray = [
                 self.numberToBE(1, 32),
@@ -1137,8 +1142,8 @@ class bytetrade(Exchange):
                 self.numberToLE(self.integer_modulo(assetFee, eightBytes), 8),
                 self.numberToLE(0, 1),
                 self.numberToLE(1, 1),
-                self.numberToLE(len(chainName), 1),
-                self.encode(chainName),
+                self.numberToLE(len(dappId), 1),
+                self.encode(dappId),
                 self.numberToLE(0, 1),
             ]
         else:
@@ -1167,8 +1172,8 @@ class bytetrade(Exchange):
                 self.numberToLE(self.integer_modulo(amountChain, eightBytes), 8),
                 self.numberToLE(0, 1),
                 self.numberToLE(1, 1),
-                self.numberToLE(len(chainName), 1),
-                self.encode(chainName),
+                self.numberToLE(len(dappId), 1),
+                self.encode(dappId),
                 self.numberToLE(0, 1),
             ]
         bytestring = self.binary_concat_array(byteStringArray)
@@ -1180,7 +1185,7 @@ class bytetrade(Exchange):
         request = None
         operation = None
         chainContractAddress = self.safe_string(currency['info'], 'chainContractAddress')
-        if chainTypeString == 'bitcoin':
+        if operationId == 26:
             operation = {
                 'fee': feeAmount,
                 'from': self.apiKey,
@@ -1199,15 +1204,15 @@ class bytetrade(Exchange):
                     ],
                 ],
                 'validate_type': 0,
-                'dapp': 'Sagittarius',
+                'dapp': dappId,
                 'signatures': [
                     mySignature,
                 ],
             }
             request = {
-                'chainType': chainType,
+                'chainType': chainId,
                 'trObj': self.json(fatty),
-                'chainContractAddresss': chainContractAddress,
+                'chainContractAddress': chainContractAddress,
             }
         else:
             operation = {
@@ -1236,17 +1241,25 @@ class bytetrade(Exchange):
                     ],
                 ],
                 'validate_type': 0,
-                'dapp': 'Sagittarius',
+                'dapp': dappId,
                 'signatures': [
                     mySignature,
                 ],
             }
-            request = {
-                'chainType': chainType,
-                'toExternalAddress': address,
-                'trObj': self.json(fatty),
-                'chainContractAddresss': chainContractAddress,
-            }
+            if chainTypeString == 'eos':
+                request = {
+                    'chainType': chainId,
+                    'toExternalAddress': 'noneed',
+                    'trObj': self.json(fatty),
+                    'chainContractAddress': chainContractAddress,
+                }
+            else:
+                request = {
+                    'chainType': chainId,
+                    'toExternalAddress': address,
+                    'trObj': self.json(fatty),
+                    'chainContractAddress': chainContractAddress,
+                }
         response = await self.publicPostTransactionWithdraw(request)
         return {
             'info': response,
