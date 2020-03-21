@@ -13,7 +13,8 @@ module.exports = class simplefx extends Exchange {
         return this.deepExtend(super.describe(), {
             'id': 'simplefx',
             'name': 'Simplefx',
-            'rateLimit': 1000,
+            'rateLimit': 10000,
+            'timeout': 100000,
             'version': 'v3',
             'has': {
                 'CORS': true,

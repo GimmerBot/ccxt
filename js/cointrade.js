@@ -45,9 +45,9 @@ module.exports = class cointrade extends Exchange {
             'urls': {
                 'logo': 'https://broker.cointradecx.com/resources/images/logo-cointrade1.png',
                 'api': {
-                    'public': 'https://api.cointradecx.com/apiv2',
+                    'public': 'https://api.cointradecx.com/public',
                     'broker': 'https://broker.cointradecx.com/apiv2',
-                    'private': 'https://api.cointradecx.com/apiv2',
+                    'private': 'https://api.cointradecx.com/pricate',
                 },
                 'www': 'https://broker.cointradecx.com',
                 'doc': [
@@ -62,9 +62,9 @@ module.exports = class cointrade extends Exchange {
                 },
                 'public': {
                     'get': [
-                        'ordens/{pair}', // order book by pair
-                        'ticket/markets', // get market list
-                        'ticket/market/{pair}', // fetch ticker by pair
+                        'orderbook?market={pair}', // order book by pair
+                        'markets', // get market list
+                        'ticker?market={pair}', // fetch ticker by pair
                         'trades/{pair}', // last negotiations by pair
                     ],
                 },
