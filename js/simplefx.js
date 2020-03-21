@@ -3,7 +3,6 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require('./base/Exchange');
-const request = require("request");
 const { ExchangeError, ArgumentsRequired, InvalidOrder } = require('./base/errors');
 
 //  ---------------------------------------------------------------------------
@@ -606,26 +605,5 @@ module.exports = class simplefx extends Exchange {
             throw new ExchangeError(this.id + ' ' + this.json(response));
         }
         return response;
-    }
-
-    async postRequest(url, content, headers = null) {
-        return new Promise((resolve, reject) => {
-            var options = {
-                url,
-                headers: headers || {
-                    'Content-Type': 'application/json'
-                },
-                json: content
-            };
-
-            request.post(options, async (err, httpResponse, result) => {
-                if (err) {
-                    console.log(err.stack || err.message || err);
-                    reject(err.stack || err.message);
-                }
-
-                resolve(result);
-            });
-        })
-    }
+    }    
 };
