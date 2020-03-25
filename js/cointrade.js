@@ -369,7 +369,7 @@ module.exports = class cointrade extends Exchange {
         const market = this.market(symbol);
         const request = {
             'resolution': this.timeframes[timeframe],
-            'symbol': market['id'],
+            'symbol': market['id'].replace("_", ":"),
         };
         if (limit !== undefined && since !== undefined) {
             request['from'] = parseInt(since / 1000);
@@ -438,9 +438,9 @@ module.exports = class cointrade extends Exchange {
 
     async request(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         const response = await this.fetch2(path, api, method, params, headers, body);
-        if (!response.success) {
-            throw new ExchangeError(this.id + ' ' + response.mensagem);
-        }
-        return response;
+        if (response.success || response.sucesso) {
+            return response;
+        }        
+        throw new ExchangeError(this.id + ' ' + response.mensagem);
     }
 };
