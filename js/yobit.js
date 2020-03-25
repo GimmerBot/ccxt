@@ -883,13 +883,13 @@ module.exports = class yobit extends Exchange {
         };
 
         if (limit !== undefined && since !== undefined) {
-            request['from'] = parseInt(since / 1000);
+            request['from'] = parseInt(since);
             request['to'] = this.sum(request['from'], limit * this.parseTimeframe(timeframe));
         } else if (since !== undefined) {
-            request['from'] = parseInt(since / 1000);
-            request['to'] = this.sum(this.seconds(), 1);
+            request['from'] = parseInt(since);
+            request['to'] = this.sum(this.milliseconds(), 1);
         } else if (limit !== undefined) {
-            request['to'] = this.seconds();
+            request['to'] = this.milliseconds();
             request['from'] = request['to'] - (limit * this.parseTimeframe(timeframe));
         }
         const response = await this.internalPostSystemChartPhp(this.extend(request, params));
@@ -964,6 +964,9 @@ module.exports = class yobit extends Exchange {
                 }
             }
         }
+
+        headers = headers || {};
+        
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
 
