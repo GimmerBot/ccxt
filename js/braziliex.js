@@ -601,6 +601,7 @@ module.exports = class braziliex extends Exchange {
             'resolution': this.timeframes[timeframe],
             'symbol': market['id'].toLowerCase(),
         };
+
         if (limit !== undefined && since !== undefined) {
             request['from'] = parseInt(since / 1000);
             request['to'] = this.sum(request['from'], limit * this.parseTimeframe(timeframe));
@@ -626,6 +627,17 @@ module.exports = class braziliex extends Exchange {
         }
 
         return this.parseOHLCVs(ohlcv, market, timeframe, since, limit);
+    }
+
+    parseOHLCV(ohlcv, market = undefined, timeframe = '1m', since = undefined, limit = undefined) {
+        return [
+            this.safeTimestamp(ohlcv, 'timestamp'),
+            this.safeFloat(ohlcv, 'open'),
+            this.safeFloat(ohlcv, 'high'),
+            this.safeFloat(ohlcv, 'low'),
+            this.safeFloat(ohlcv, 'close'),
+            this.safeFloat(ohlcv, 'volume'),
+        ];
     }
 
     sign(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
