@@ -2,14 +2,14 @@
 
 //  ---------------------------------------------------------------------------
 
-const Exchange = require('./base/Exchange');
-const { ExchangeError, InvalidOrder, AuthenticationError, ArgumentsRequired } = require('./base/errors');
+const Exchange = require ('./base/Exchange');
+const { ExchangeError, InvalidOrder, AuthenticationError, ArgumentsRequired } = require ('./base/errors');
 
 //  ---------------------------------------------------------------------------
 
 module.exports = class braziliex extends Exchange {
-    describe() {
-        return this.deepExtend(super.describe(), {
+    describe () {
+        return this.deepExtend (super.describe (), {
             'id': 'braziliex',
             'name': 'Braziliex',
             'countries': ['BR'],
@@ -99,25 +99,25 @@ module.exports = class braziliex extends Exchange {
         });
     }
 
-    async fetchCurrenciesFromCache(params = {}) {
+    async fetchCurrenciesFromCache (params = {}) {
         // this method is now redundant
         // currencies are now fetched before markets
-        const options = this.safeValue(this.options, 'fetchCurrencies', {});
-        const timestamp = this.safeInteger(options, 'timestamp');
-        const expires = this.safeInteger(options, 'expires', 1000);
-        const now = this.milliseconds();
-        if ((timestamp === undefined) || ((now - timestamp) > expires)) {
-            const response = await this.publicGetCurrencies(params);
-            this.options['fetchCurrencies'] = this.extend(options, {
+        const options = this.safeValue (this.options, 'fetchCurrencies', {});
+        const timestamp = this.safeInteger (options, 'timestamp');
+        const expires = this.safeInteger (options, 'expires', 1000);
+        const now = this.milliseconds ();
+        if ( (timestamp === undefined) || ( (now - timestamp) > expires)) {
+            const response = await this.publicGetCurrencies (params);
+            this.options['fetchCurrencies'] = this.extend (options, {
                 'response': response,
                 'timestamp': now,
             });
         }
-        return this.safeValue(this.options['fetchCurrencies'], 'response');
+        return this.safeValue (this.options['fetchCurrencies'], 'response');
     }
 
-    async fetchCurrencies(params = {}) {
-        const response = await this.fetchCurrenciesFromCache(params);
+    async fetchCurrencies (params = {}) {
+        const response = await this.fetchCurrenciesFromCache (params);
         //
         //     {
         //         brl: {
@@ -171,23 +171,23 @@ module.exports = class braziliex extends Exchange {
         //     }
         //
         this.options['currencies'] = {
-            'timestamp': this.milliseconds(),
+            'timestamp': this.milliseconds (),
             'response': response,
         };
-        const ids = Object.keys(response);
+        const ids = Object.keys (response);
         const result = {};
         for (let i = 0; i < ids.length; i++) {
             const id = ids[i];
             const currency = response[id];
-            const precision = this.safeInteger(currency, 'decimal');
-            const code = this.safeCurrencyCode(id);
-            let active = this.safeInteger(currency, 'active') === 1;
-            const maintenance = this.safeInteger(currency, 'under_maintenance');
+            const precision = this.safeInteger (currency, 'decimal');
+            const code = this.safeCurrencyCode (id);
+            let active = this.safeInteger (currency, 'active') === 1;
+            const maintenance = this.safeInteger (currency, 'under_maintenance');
             if (maintenance !== 0) {
                 active = false;
             }
-            const canWithdraw = this.safeInteger(currency, 'is_withdrawal_active') === 1;
-            const canDeposit = this.safeInteger(currency, 'is_deposit_active') === 1;
+            const canWithdraw = this.safeInteger (currency, 'is_withdrawal_active') === 1;
+            const canDeposit = this.safeInteger (currency, 'is_deposit_active') === 1;
             if (!canWithdraw || !canDeposit) {
                 active = false;
             }
@@ -200,32 +200,32 @@ module.exports = class braziliex extends Exchange {
                 'funding': {
                     'withdraw': {
                         'active': canWithdraw,
-                        'fee': this.safeFloat(currency, 'txWithdrawalFee'),
+                        'fee': this.safeFloat (currency, 'txWithdrawalFee'),
                     },
                     'deposit': {
                         'active': canDeposit,
-                        'fee': this.safeFloat(currency, 'txDepositFee'),
+                        'fee': this.safeFloat (currency, 'txDepositFee'),
                     },
                 },
                 'limits': {
                     'amount': {
-                        'min': Math.pow(10, -precision),
-                        'max': Math.pow(10, precision),
+                        'min': Math.pow (10, -precision),
+                        'max': Math.pow (10, precision),
                     },
                     'price': {
-                        'min': Math.pow(10, -precision),
-                        'max': Math.pow(10, precision),
+                        'min': Math.pow (10, -precision),
+                        'max': Math.pow (10, precision),
                     },
                     'cost': {
                         'min': undefined,
                         'max': undefined,
                     },
                     'withdraw': {
-                        'min': this.safeFloat(currency, 'MinWithdrawal'),
-                        'max': Math.pow(10, precision),
+                        'min': this.safeFloat (currency, 'MinWithdrawal'),
+                        'max': Math.pow (10, precision),
                     },
                     'deposit': {
-                        'min': this.safeFloat(currency, 'minDeposit'),
+                        'min': this.safeFloat (currency, 'minDeposit'),
                         'max': undefined,
                     },
                 },
@@ -235,9 +235,9 @@ module.exports = class braziliex extends Exchange {
         return result;
     }
 
-    async fetchMarkets(params = {}) {
-        const currencies = await this.fetchCurrenciesFromCache(params);
-        const response = await this.publicGetTicker();
+    async fetchMarkets (params = {}) {
+        const currencies = await this.fetchCurrenciesFromCache (params);
+        const response = await this.publicGetTicker ();
         //
         //     {
         //         btc_brl: {
@@ -257,33 +257,33 @@ module.exports = class braziliex extends Exchange {
         //         ...
         //     }
         //
-        const ids = Object.keys(response);
+        const ids = Object.keys (response);
         const result = [];
         for (let i = 0; i < ids.length; i++) {
             const id = ids[i];
             const market = response[id];
-            const [baseId, quoteId] = id.split('_');
-            const uppercaseBaseId = baseId.toUpperCase();
-            const uppercaseQuoteId = quoteId.toUpperCase();
-            const base = this.safeCurrencyCode(uppercaseBaseId);
-            const quote = this.safeCurrencyCode(uppercaseQuoteId);
+            const [baseId, quoteId] = id.split ('_');
+            const uppercaseBaseId = baseId.toUpperCase ();
+            const uppercaseQuoteId = quoteId.toUpperCase ();
+            const base = this.safeCurrencyCode (uppercaseBaseId);
+            const quote = this.safeCurrencyCode (uppercaseQuoteId);
             const symbol = base + '/' + quote;
-            const baseCurrency = this.safeValue(currencies, baseId, {});
-            const quoteCurrency = this.safeValue(currencies, quoteId, {});
-            const quoteIsFiat = this.safeInteger(quoteCurrency, 'is_fiat', 0);
+            const baseCurrency = this.safeValue (currencies, baseId, {});
+            const quoteCurrency = this.safeValue (currencies, quoteId, {});
+            const quoteIsFiat = this.safeInteger (quoteCurrency, 'is_fiat', 0);
             let minCost = undefined;
             if (quoteIsFiat) {
-                minCost = this.safeFloat(baseCurrency, 'minAmountTradeFIAT');
+                minCost = this.safeFloat (baseCurrency, 'minAmountTradeFIAT');
             } else {
-                minCost = this.safeFloat(baseCurrency, 'minAmountTrade' + uppercaseQuoteId);
+                minCost = this.safeFloat (baseCurrency, 'minAmountTrade' + uppercaseQuoteId);
             }
-            const isActive = this.safeInteger(market, 'active');
+            const isActive = this.safeInteger (market, 'active');
             const active = (isActive === 1);
             const precision = {
                 'amount': 8,
                 'price': 8,
             };
-            result.push({
+            result.push ({
                 'id': id,
                 'symbol': symbol,
                 'base': base,
@@ -294,12 +294,12 @@ module.exports = class braziliex extends Exchange {
                 'precision': precision,
                 'limits': {
                     'amount': {
-                        'min': Math.pow(10, -precision['amount']),
-                        'max': Math.pow(10, precision['amount']),
+                        'min': Math.pow (10, -precision['amount']),
+                        'max': Math.pow (10, precision['amount']),
                     },
                     'price': {
-                        'min': Math.pow(10, -precision['price']),
-                        'max': Math.pow(10, precision['price']),
+                        'min': Math.pow (10, -precision['price']),
+                        'max': Math.pow (10, precision['price']),
                     },
                     'cost': {
                         'min': minCost,
@@ -312,88 +312,88 @@ module.exports = class braziliex extends Exchange {
         return result;
     }
 
-    parseTicker(ticker, market = undefined) {
+    parseTicker (ticker, market = undefined) {
         let symbol = undefined;
         if (market !== undefined) {
             symbol = market['symbol'];
         }
-        const timestamp = this.milliseconds();
-        const last = this.safeFloat(ticker, 'last');
+        const timestamp = this.milliseconds ();
+        const last = this.safeFloat (ticker, 'last');
         return {
             'symbol': symbol,
             'timestamp': timestamp,
-            'datetime': this.iso8601(timestamp),
-            'high': this.safeFloat(ticker, 'highestBid24'),
-            'low': this.safeFloat(ticker, 'lowestAsk24'),
-            'bid': this.safeFloat(ticker, 'highestBid'),
+            'datetime': this.iso8601 (timestamp),
+            'high': this.safeFloat (ticker, 'highestBid24'),
+            'low': this.safeFloat (ticker, 'lowestAsk24'),
+            'bid': this.safeFloat (ticker, 'highestBid'),
             'bidVolume': undefined,
-            'ask': this.safeFloat(ticker, 'lowestAsk'),
+            'ask': this.safeFloat (ticker, 'lowestAsk'),
             'askVolume': undefined,
             'vwap': undefined,
             'open': undefined,
             'close': last,
             'last': last,
             'previousClose': undefined,
-            'change': this.safeFloat(ticker, 'percentChange'),
+            'change': this.safeFloat (ticker, 'percentChange'),
             'percentage': undefined,
             'average': undefined,
-            'baseVolume': this.safeFloat(ticker, 'baseVolume24'),
-            'quoteVolume': this.safeFloat(ticker, 'quoteVolume24'),
+            'baseVolume': this.safeFloat (ticker, 'baseVolume24'),
+            'quoteVolume': this.safeFloat (ticker, 'quoteVolume24'),
             'info': ticker,
         };
     }
 
-    async fetchTicker(symbol, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async fetchTicker (symbol, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'market': market['id'],
         };
-        const response = await this.publicGetTickerMarket(this.extend(request, params));
-        return this.parseTicker(response, market);
+        const response = await this.publicGetTickerMarket (this.extend (request, params));
+        return this.parseTicker (response, market);
     }
 
-    async fetchTickers(symbols = undefined, params = {}) {
-        await this.loadMarkets();
-        const response = await this.publicGetTicker(params);
+    async fetchTickers (symbols = undefined, params = {}) {
+        await this.loadMarkets ();
+        const response = await this.publicGetTicker (params);
         const result = {};
-        const ids = Object.keys(response);
+        const ids = Object.keys (response);
         for (let i = 0; i < ids.length; i++) {
             const marketId = ids[i];
             const market = this.markets_by_id[marketId];
             const symbol = market['symbol'];
-            result[symbol] = this.parseTicker(response[marketId], market);
+            result[symbol] = this.parseTicker (response[marketId], market);
         }
         return result;
     }
 
-    async fetchOrderBook(symbol, limit = undefined, params = {}) {
-        await this.loadMarkets();
+    async fetchOrderBook (symbol, limit = undefined, params = {}) {
+        await this.loadMarkets ();
         const request = {
-            'market': this.marketId(symbol),
+            'market': this.marketId (symbol),
         };
-        const response = await this.publicGetOrderbookMarket(this.extend(request, params));
-        return this.parseOrderBook(response, undefined, 'bids', 'asks', 'price', 'amount');
+        const response = await this.publicGetOrderbookMarket (this.extend (request, params));
+        return this.parseOrderBook (response, undefined, 'bids', 'asks', 'price', 'amount');
     }
 
-    parseTrade(trade, market = undefined) {
-        const timestamp = this.parse8601(this.safeString2(trade, 'date_exec', 'date'));
-        const price = this.safeFloat(trade, 'price');
-        const amount = this.safeFloat(trade, 'amount');
+    parseTrade (trade, market = undefined) {
+        const timestamp = this.parse8601 (this.safeString2 (trade, 'date_exec', 'date'));
+        const price = this.safeFloat (trade, 'price');
+        const amount = this.safeFloat (trade, 'amount');
         let symbol = undefined;
         if (market !== undefined) {
             symbol = market['symbol'];
         }
-        const cost = this.safeFloat(trade, 'total');
-        const orderId = this.safeString(trade, 'order_number');
+        const cost = this.safeFloat (trade, 'total');
+        const orderId = this.safeString (trade, 'order_number');
         const type = 'limit';
-        const side = this.safeString(trade, 'type');
-        const id = this.safeString(trade, '_id');
+        const side = this.safeString (trade, 'type');
+        const id = this.safeString (trade, '_id');
         return {
             'id': id,
             'info': trade,
             'timestamp': timestamp,
-            'datetime': this.iso8601(timestamp),
+            'datetime': this.iso8601 (timestamp),
             'symbol': symbol,
             'order': orderId,
             'type': type,
@@ -406,34 +406,34 @@ module.exports = class braziliex extends Exchange {
         };
     }
 
-    async fetchTrades(symbol, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'market': market['id'],
         };
-        const response = await this.publicGetTradehistoryMarket(this.extend(request, params));
-        return this.parseTrades(response, market, since, limit);
+        const response = await this.publicGetTradehistoryMarket (this.extend (request, params));
+        return this.parseTrades (response, market, since, limit);
     }
 
-    async fetchBalance(params = {}) {
-        await this.loadMarkets();
-        const balances = await this.privatePostCompleteBalance(params);
+    async fetchBalance (params = {}) {
+        await this.loadMarkets ();
+        const balances = await this.privatePostCompleteBalance (params);
         const result = { 'info': balances };
-        const currencyIds = Object.keys(balances);
+        const currencyIds = Object.keys (balances);
         for (let i = 0; i < currencyIds.length; i++) {
             const currencyId = currencyIds[i];
             const balance = balances[currencyId];
-            const code = this.safeCurrencyCode(currencyId);
-            const account = this.account();
-            account['free'] = this.safeFloat(balance, 'available');
-            account['total'] = this.safeFloat(balance, 'total');
+            const code = this.safeCurrencyCode (currencyId);
+            const account = this.account ();
+            account['free'] = this.safeFloat (balance, 'available');
+            account['total'] = this.safeFloat (balance, 'total');
             result[code] = account;
         }
-        return this.parseBalance(result);
+        return this.parseBalance (result);
     }
 
-    parseOrder(order, market = undefined) {
+    parseOrder (order, market = undefined) {
         //
         //     {
         //         "order_number":"58ee441d05f8233fadabfb07",
@@ -448,7 +448,7 @@ module.exports = class braziliex extends Exchange {
         //
         let symbol = undefined;
         if (market === undefined) {
-            const marketId = this.safeString(order, 'market');
+            const marketId = this.safeString (order, 'market');
             if (marketId in this.markets_by_id) {
                 market = this.markets_by_id[marketId];
             }
@@ -456,26 +456,26 @@ module.exports = class braziliex extends Exchange {
         if (market !== undefined) {
             symbol = market['symbol'];
         }
-        let timestamp = this.safeInteger(order, 'timestamp');
+        let timestamp = this.safeInteger (order, 'timestamp');
         if (timestamp === undefined) {
-            timestamp = this.parse8601(this.safeString(order, 'date'));
+            timestamp = this.parse8601 (this.safeString (order, 'date'));
         }
-        const price = this.safeFloat(order, 'price');
-        const cost = this.safeFloat(order, 'total', 0.0);
-        const amount = this.safeFloat(order, 'amount');
-        const filledPercentage = this.safeFloat(order, 'progress');
+        const price = this.safeFloat (order, 'price');
+        const cost = this.safeFloat (order, 'total', 0.0);
+        const amount = this.safeFloat (order, 'amount');
+        const filledPercentage = this.safeFloat (order, 'progress');
         const filled = amount * filledPercentage;
-        const remaining = parseFloat(this.amountToPrecision(symbol, amount - filled));
+        const remaining = parseFloat (this.amountToPrecision (symbol, amount - filled));
         let info = order;
         if ('info' in info) {
             info = order['info'];
         }
-        const id = this.safeString(order, 'order_number');
-        const fee = this.safeValue(order, 'fee'); // propagated from createOrder
+        const id = this.safeString (order, 'order_number');
+        const fee = this.safeValue (order, 'fee'); // propagated from createOrder
         const status = (filledPercentage === 1.0) ? 'closed' : 'open';
         return {
             'id': id,
-            'datetime': this.iso8601(timestamp),
+            'datetime': this.iso8601 (timestamp),
             'timestamp': timestamp,
             'lastTradeTimestamp': undefined,
             'status': status,
@@ -493,10 +493,10 @@ module.exports = class braziliex extends Exchange {
         };
     }
 
-    async createOrder(symbol, type, side, amount, price = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
-        const method = 'privatePost' + this.capitalize(side);
+    async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const method = 'privatePost' + this.capitalize (side);
         const request = {
             'market': market['id'],
             // 'price': this.priceToPrecision (symbol, price),
@@ -504,24 +504,24 @@ module.exports = class braziliex extends Exchange {
             'price': price,
             'amount': amount,
         };
-        const response = await this[method](this.extend(request, params));
-        const success = this.safeInteger(response, 'success');
+        const response = await this[method] (this.extend (request, params));
+        const success = this.safeInteger (response, 'success');
         if (success !== 1) {
-            throw new InvalidOrder(this.id + ' ' + this.json(response));
+            throw new InvalidOrder (this.id + ' ' + this.json (response));
         }
-        let parts = response['message'].split(' / ');
-        parts = parts.slice(1);
-        const feeParts = parts[5].split(' ');
-        const order = this.parseOrder({
-            'timestamp': this.milliseconds(),
+        let parts = response['message'].split (' / ');
+        parts = parts.slice (1);
+        const feeParts = parts[5].split (' ');
+        const order = this.parseOrder ({
+            'timestamp': this.milliseconds (),
             'order_number': response['order_number'],
-            'type': parts[0].toLowerCase(),
-            'market': parts[0].toLowerCase(),
-            'amount': parts[2].split(' ')[1],
-            'price': parts[3].split(' ')[1],
-            'total': parts[4].split(' ')[1],
+            'type': parts[0].toLowerCase (),
+            'market': parts[0].toLowerCase (),
+            'amount': parts[2].split (' ')[1],
+            'price': parts[3].split (' ')[1],
+            'total': parts[4].split (' ')[1],
             'fee': {
-                'cost': parseFloat(feeParts[1]),
+                'cost': parseFloat (feeParts[1]),
                 'currency': feeParts[2],
             },
             'progress': '0.0',
@@ -532,60 +532,60 @@ module.exports = class braziliex extends Exchange {
         return order;
     }
 
-    async cancelOrder(id, symbol = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async cancelOrder (id, symbol = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'order_number': id,
             'market': market['id'],
         };
-        return await this.privatePostCancelOrder(this.extend(request, params));
+        return await this.privatePostCancelOrder (this.extend (request, params));
     }
 
-    async fetchOrder(id, symbol = undefined, params = {}) {
+    async fetchOrder (id, symbol = undefined, params = {}) {
         if (symbol === undefined) {
-            throw new ArgumentsRequired(this.id + ' fetchOrder() requires a symbol argument');
+            throw new ArgumentsRequired (this.id + ' fetchOrder () requires a symbol argument');
         }
-        await this.loadMarkets();
-        const market = this.market(symbol);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'order_number': id,
             'market': market['id'],
         };
-        const response = await this.privatePostOrderStatus(this.extend(request, params));
-        return this.parseOrder(response, market);
+        const response = await this.privatePostOrderStatus (this.extend (request, params));
+        return this.parseOrder (response, market);
     }
 
-    async fetchOpenOrders(symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'market': market['id'],
         };
-        const response = await this.privatePostOpenOrders(this.extend(request, params));
-        return this.parseOrders(response['order_open'], market, since, limit);
+        const response = await this.privatePostOpenOrders (this.extend (request, params));
+        return this.parseOrders (response['order_open'], market, since, limit);
     }
 
-    async fetchMyTrades(symbol = undefined, since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'market': market['id'],
         };
-        const response = await this.privatePostTradeHistory(this.extend(request, params));
-        return this.parseTrades(response['trade_history'], market, since, limit);
+        const response = await this.privatePostTradeHistory (this.extend (request, params));
+        return this.parseTrades (response['trade_history'], market, since, limit);
     }
 
-    async fetchDepositAddress(code, params = {}) {
-        await this.loadMarkets();
-        const currency = this.currency(code);
+    async fetchDepositAddress (code, params = {}) {
+        await this.loadMarkets ();
+        const currency = this.currency (code);
         const request = {
             'currency': currency['id'],
         };
-        const response = await this.privatePostDepositAddress(this.extend(request, params));
-        const address = this.safeString(response, 'deposit_address');
-        this.checkAddress(address);
-        const tag = this.safeString(response, 'payment_id');
+        const response = await this.privatePostDepositAddress (this.extend (request, params));
+        const address = this.safeString (response, 'deposit_address');
+        this.checkAddress (address);
+        const tag = this.safeString (response, 'payment_id');
         return {
             'currency': code,
             'address': address,
@@ -594,29 +594,29 @@ module.exports = class braziliex extends Exchange {
         };
     }
 
-    async fetchOHLCV(symbol, timeframe = '5m', since = undefined, limit = undefined, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+    async fetchOHLCV (symbol, timeframe = '5m', since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const request = {
             'resolution': this.timeframes[timeframe],
-            'symbol': market['id'].toLowerCase(),
+            'symbol': market['id'].toLowerCase (),
         };
 
         if (limit !== undefined && since !== undefined) {
-            request['from'] = parseInt(since / 1000);
-            request['to'] = this.sum(request['from'], limit * this.parseTimeframe(timeframe));
+            request['from'] = parseInt (since / 1000);
+            request['to'] = this.sum (request['from'], limit * this.parseTimeframe (timeframe));
         } else if (since !== undefined) {
-            request['from'] = parseInt(since / 1000);
-            request['to'] = this.sum(this.seconds(), 1);
+            request['from'] = parseInt (since / 1000);
+            request['to'] = this.sum (this.seconds (), 1);
         } else if (limit !== undefined) {
-            request['to'] = this.seconds();
-            request['from'] = request['to'] - (limit * this.parseTimeframe(timeframe));
+            request['to'] = this.seconds ();
+            request['from'] = request['to'] - (limit * this.parseTimeframe (timeframe));
         }
-        const response = await this.ohlcvGetDatafeedHistory(this.extend(request, params));
+        const response = await this.ohlcvGetDatafeedHistory (this.extend (request, params));
 
         const ohlcv = [];
         for (let i = 0; i < response.t.length; i++) {
-            ohlcv.push({
+            ohlcv.push ({
                 'timestamp': response.t[i],
                 'open': response.o[i],
                 'high': response.h[i],
@@ -626,36 +626,36 @@ module.exports = class braziliex extends Exchange {
             });
         }
 
-        return this.parseOHLCVs(ohlcv, market, timeframe, since, limit);
+        return this.parseOHLCVs (ohlcv, market, timeframe, since, limit);
     }
 
-    parseOHLCV(ohlcv, market = undefined, timeframe = '1m', since = undefined, limit = undefined) {
+    parseOHLCV (ohlcv, market = undefined, timeframe = '1m', since = undefined, limit = undefined) {
         return [
-            this.safeTimestamp(ohlcv, 'timestamp'),
-            this.safeFloat(ohlcv, 'open'),
-            this.safeFloat(ohlcv, 'high'),
-            this.safeFloat(ohlcv, 'low'),
-            this.safeFloat(ohlcv, 'close'),
-            this.safeFloat(ohlcv, 'volume'),
+            this.safeTimestamp (ohlcv, 'timestamp'),
+            this.safeFloat (ohlcv, 'open'),
+            this.safeFloat (ohlcv, 'high'),
+            this.safeFloat (ohlcv, 'low'),
+            this.safeFloat (ohlcv, 'close'),
+            this.safeFloat (ohlcv, 'volume'),
         ];
     }
 
-    sign(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
+    sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let url = this.urls['api'] + (api != 'ohlcv' ? '/' + api : '');
-        let query = this.omit(params, this.extractParams(path));
+        let query = this.omit (params, this.extractParams (path));
         if (api === 'public' || api === 'ohlcv') {
-            url += '/' + this.implodeParams(path, params);
-            if (Object.keys(query).length) {
-                url += '?' + this.urlencode(query);
+            url += '/' + this.implodeParams (path, params);
+            if (Object.keys (query).length) {
+                url += '?' + this.urlencode (query);
             }
         } else {
-            this.checkRequiredCredentials();
-            query = this.extend({
+            this.checkRequiredCredentials ();
+            query = this.extend ({
                 'command': path,
-                'nonce': this.nonce(),
+                'nonce': this.nonce (),
             }, query);
-            body = this.urlencode(query);
-            const signature = this.hmac(this.encode(body), this.encode(this.secret), 'sha512');
+            body = this.urlencode (query);
+            const signature = this.hmac (this.encode (body), this.encode (this.secret), 'sha512');
             headers = {
                 'Content-type': 'application/x-www-form-urlencoded',
                 'Key': this.apiKey,
@@ -665,19 +665,19 @@ module.exports = class braziliex extends Exchange {
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
 
-    async request(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
-        const response = await this.fetch2(path, api, method, params, headers, body);
-        if ((typeof response === 'string') && (response.length < 1)) {
-            throw new ExchangeError(this.id + ' returned empty response');
+    async request (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
+        const response = await this.fetch2 (path, api, method, params, headers, body);
+        if ( (typeof response === 'string') && (response.length < 1)) {
+            throw new ExchangeError (this.id + ' returned empty response');
         }
         if ('success' in response) {
-            const success = this.safeInteger(response, 'success');
+            const success = this.safeInteger (response, 'success');
             if (success === 0) {
-                const message = this.safeString(response, 'message');
+                const message = this.safeString (response, 'message');
                 if (message === 'Invalid APIKey') {
-                    throw new AuthenticationError(message);
+                    throw new AuthenticationError (message);
                 }
-                throw new ExchangeError(message);
+                throw new ExchangeError (message);
             }
         }
         return response;
