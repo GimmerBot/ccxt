@@ -90,34 +90,12 @@ module.exports = class braziliex extends Exchange {
             'precision': {
                 'amount': 8,
                 'price': 8,
-            },
-            'options': {
-                'fetchCurrencies': {
-                    'expires': 1000, // 1 second
-                },
-            },
+            }
         });
-    }
-
-    async fetchCurrenciesFromCache (params = {}) {
-        // this method is now redundant
-        // currencies are now fetched before markets
-        const options = this.safeValue (this.options, 'fetchCurrencies', {});
-        const timestamp = this.safeInteger (options, 'timestamp');
-        const expires = this.safeInteger (options, 'expires', 1000);
-        const now = this.milliseconds ();
-        if ( (timestamp === undefined) || ( (now - timestamp) > expires)) {
-            const response = await this.publicGetCurrencies (params);
-            this.options['fetchCurrencies'] = this.extend (options, {
-                'response': response,
-                'timestamp': now,
-            });
-        }
-        return this.safeValue (this.options['fetchCurrencies'], 'response');
-    }
+    }    
 
     async fetchCurrencies (params = {}) {
-        const response = await this.fetchCurrenciesFromCache (params);
+        const response = await this.publicGetCurrencies (params);
         //
         //     {
         //         brl: {
@@ -170,10 +148,6 @@ module.exports = class braziliex extends Exchange {
         //         }
         //     }
         //
-        this.options['currencies'] = {
-            'timestamp': this.milliseconds (),
-            'response': response,
-        };
         const ids = Object.keys (response);
         const result = {};
         for (let i = 0; i < ids.length; i++) {
@@ -236,7 +210,7 @@ module.exports = class braziliex extends Exchange {
     }
 
     async fetchMarkets (params = {}) {
-        const currencies = await this.fetchCurrenciesFromCache (params);
+        const currencies = await this.fetchCurrencies (params);
         const response = await this.publicGetTicker ();
         //
         //     {
