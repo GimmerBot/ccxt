@@ -911,7 +911,7 @@ module.exports = class yobit extends Exchange {
 
     parseOHLCV(ohlcv, market = undefined, timeframe = '1m', since = undefined, limit = undefined) {
         return [
-            this.safeTimestamp(ohlcv, 'timestamp'),
+            this.safeValue(ohlcv, 'timestamp'),
             this.safeFloat(ohlcv, 'open'),
             this.safeFloat(ohlcv, 'high'),
             this.safeFloat(ohlcv, 'low'),
