@@ -196,9 +196,6 @@ module.exports = class kucoin extends Exchange {
                 'version': 'v1',
                 'symbolSeparator': '-',
                 'fetchMyTradesMethod': 'private_get_fills',
-                'fetchBalance': {
-                    'type': 'trade', // or 'main'
-                },
                 // endpoint versions
                 'versions': {
                     'public': {
