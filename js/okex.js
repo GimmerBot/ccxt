@@ -677,7 +677,6 @@ module.exports = class okex extends Exchange {
             return result;
         }        
 
-        const type = this.safeValue(params, 'type', '') || this.safeValue(this.options, 'defaultType');
         const markets = await this.fetchMarketsByType(type, params);
         return this.arrayConcat(result, markets);
     }
