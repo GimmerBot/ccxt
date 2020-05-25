@@ -632,7 +632,7 @@ module.exports = class okex extends Exchange {
             'precisionMode': TICK_SIZE,
             'options': {
                 'createMarketBuyOrderRequiresPrice': true,
-                'fetchMarkets': [ 'spot', 'futures', 'swap', 'option' ],
+                '#fetchMarkets': [ 'spot', 'futures', 'swap', 'option' ],
                 'defaultType': 'spot', // 'account', 'spot', 'margin', 'futures', 'swap', 'option'
                 'auth': {
                     'time': 'public',
