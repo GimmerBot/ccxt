@@ -632,6 +632,7 @@ module.exports = class okex extends Exchange {
             'precisionMode': TICK_SIZE,
             'options': {
                 'createMarketBuyOrderRequiresPrice': true,
+                '#fetchMarkets': [ 'spot', 'futures', 'swap', 'option' ],
                 'defaultType': 'spot', // 'account', 'spot', 'margin', 'futures', 'swap', 'option'
                 'auth': {
                     'time': 'public',
@@ -666,17 +667,15 @@ module.exports = class okex extends Exchange {
 
     async fetchMarkets(params = {}) {
         const type = this.safeValue(params, 'type', '') || this.safeValue(this.options, 'defaultType', '');
-
+        let result = [];
         if (type === '') {
-            const types = this.safeValue(this.options, '#fetchMarkets');
-            let result = [];
+            const types = this.safeValue(this.options, '#fetchMarkets');            
             for (let i = 0; i < types.length; i++) {
                 const markets = await this.fetchMarketsByType(types[i], params);
                 result = this.arrayConcat(result, markets);
             }
             return result;
-        }        
-
+        }
         const markets = await this.fetchMarketsByType(type, params);
         return this.arrayConcat(result, markets);
     }
