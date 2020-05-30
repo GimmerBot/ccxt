@@ -1575,18 +1575,20 @@ module.exports = class okex extends Exchange {
         //     }
         //
         // their root field name is "info", so our info will contain their info
-        const result = { 'info': response };
+       
         const info = this.safeValue(response, 'info', {});
+        const result = { 'info': info };
         const ids = Object.keys(info);
         for (let i = 0; i < ids.length; i++) {
             const id = ids[i];
             const code = this.safeCurrencyCode(id);
             const balance = this.safeValue(info, id, {});
             const account = this.account();
+            const currency = this.safeValue(balance, 'currency');
             // it may be incorrect to use total, free and used for swap accounts
             account['total'] = this.safeFloat(balance, 'equity');
             account['free'] = this.safeFloat(balance, 'total_avail_balance');
-            result[code] = account;
+            result[currency] = account;
         }
         return this.parseBalance(result);
     }
@@ -1794,14 +1796,12 @@ module.exports = class okex extends Exchange {
         if (market['futures'] || market['swap']) {
             const size = market['futures'] ? this.numberToString(amount) : this.amountToPrecision(symbol, amount);
             request = this.extend(request, {
-                'type': type, // 1:open long 2:open short 3:close long 4:close short for futures
+                'type': params['orderType'], // 1:open long 2:open short 3:close long 4:close short for futures
                 'size': size,
                 'price': this.priceToPrecision(symbol, price),
                 // 'match_price': '0', // Order at best counter party price? (0:no 1:yes). The default is 0. If it is set as 1, the price parameter will be ignored. When posting orders at best bid price, order_type can only be 0 (regular order).
             });
-            if (market['futures']) {
-                request['leverage'] = '10'; // or '20'
-            }
+            delete params['orderType'];
             method = market['type'] + 'PostOrder';
         } else {
             const marginTrading = this.safeString(params, 'margin_trading', '1');  // 1 = spot, 2 = margin
