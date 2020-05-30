@@ -438,7 +438,7 @@ module.exports = class mercado extends Exchange {
         const market = this.market (symbol);
         const request = {
             'precision': this.timeframes[timeframe],
-            'coin': market['id'].toLowerCase (),
+            'coin': market['id'],
         };
         if (limit !== undefined && since !== undefined) {
             request['from'] = parseInt (since / 1000);
