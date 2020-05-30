@@ -3014,12 +3014,12 @@ module.exports = class okex extends Exchange {
         }
         const message = this.safeString(response, 'message');
         const errorCode = this.safeString2(response, 'code', 'error_code');
-        if (message !== undefined) {
+        if (!!message) {
             this.throwExactlyMatchedException(this.exceptions['exact'], message, feedback);
             this.throwBroadlyMatchedException(this.exceptions['broad'], message, feedback);
         }
         this.throwExactlyMatchedException(this.exceptions['exact'], errorCode, feedback);
-        if (message !== undefined) {
+        if (!!message) {
             throw new ExchangeError(feedback); // unknown message
         }
     }
