@@ -1358,7 +1358,7 @@ module.exports = class okex extends Exchange {
         const market = this.market (symbol);
         const method = market['type'] + 'GetInstrumentsInstrumentIdCandles';
         const request = {
-            'instrument_id': market['id'],
+            'instrument_id': market['id'].toLowerCase (),
             'granularity': this.timeframes[timeframe],
         };
         if (since !== undefined) {
