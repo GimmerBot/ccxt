@@ -1799,11 +1799,19 @@ module.exports = class okex extends Exchange {
         };
         let method = undefined;
         if (market['futures'] || market['swap']) {
-            const size = market['futures'] ? this.numberToString (amount) : this.amountToPrecision (symbol, amount);
-            request = this.extend (request, {
+            let contract_val = this.safeFloat(market.info, 'contract_val');
+            let contract_currency = this.safeString(market.info, 'contract_val_currency');
+            let size = Math.trunc(amount / contract_val);
+
+            if (size == 0) {
+                throw new InvalidOrder(this.id + " createOrder() the amount (" + amount + " " + contract_currency + ") not has the minimal value to buy one contract, contract price is " + 
+                contract_val + " " + contract_currency + "("+ contract_val * price + " " + market.baseId +")");
+            }
+
+            request = this.extend(request, {
                 'type': params['orderType'] || side == 'buy' ? 1 : 2, // 1:open long 2:open short 3:close long 4:close short for futures
                 'size': size,
-                'price': this.priceToPrecision (symbol, price),
+                'price': this.priceToPrecision(symbol, price),
                 'order_type': type == 'market' ? 4 : 0
             });
             if (market['futures']) {
