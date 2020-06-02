@@ -1811,14 +1811,10 @@ module.exports = class okex extends Exchange {
             request = this.extend(request, {
                 'type': params['orderType'] || (side == 'buy' ? 1 : 2), // 1:open long 2:open short 3:close long 4:close short for futures
                 'size': size,
-                'order_type': type == 'market' ? 4 : 0,
+                'order_type': '2',
                 'match_price': 0,
-
-            });
-
-            if (type != 'market' || params['orderType'] == 1 || params['orderType'] == 2) {
-                request['price'] = this.priceToPrecision(symbol, price);
-            }
+                'price': this.priceToPrecision(symbol, price),
+            });            
 
             if (market['futures']) {
                 request['leverage'] = '1'; // or '20'
