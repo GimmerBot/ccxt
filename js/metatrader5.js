@@ -97,7 +97,7 @@ module.exports = class metatrader5 extends Exchange {
 
     async fetchMarkets(params = {}) {
         const result = (await new Promise(async (resolve, reject) => {
-            const pairsPy = new PythonShell(path.join(__dirname, 'python/load-pairs.py'));
+            const pairsPy = new PythonShell(path.join(__dirname, 'metatrader5/load-pairs.py'));
             pairsPy.on('message', function (message) {
                 // received a message sent from the Python script (a simple "print" statement)
                 const pairsSource = JSON.parse(message);
@@ -140,7 +140,7 @@ module.exports = class metatrader5 extends Exchange {
                 request['from'] = request['to'] - (limit * this.parseTimeframe(timeframe));
             }
 
-            const pairsPy = new PythonShell(path.join(__dirname, 'python/load-ohlcv.py'), { args: [market.id, this.timeframes[timeframe], request['from'].toString(), request['to'].toString()] });
+            const pairsPy = new PythonShell(path.join(__dirname, 'metatrader5/load-ohlcv.py'), { args: [market.id, this.timeframes[timeframe], request['from'].toString(), request['to'].toString()] });
             pairsPy.on('message', function (message) {
                 // received a message sent from the Python script (a simple "print" statement)
                 const ohlcvSource = JSON.parse(message);
