@@ -96,7 +96,7 @@ module.exports = class metatrader5 extends Exchange {
     }
 
     async fetchMarkets(params = {}) {
-        const result = (await new Promise((resolve, reject) => {
+        const result = (await new Promise(async (resolve, reject) => {
             const pairsPy = new PythonShell(path.join(__dirname, 'python/load-pairs.py'));
             pairsPy.on('message', function (message) {
                 // received a message sent from the Python script (a simple "print" statement)
@@ -122,21 +122,22 @@ module.exports = class metatrader5 extends Exchange {
     }
 
     async fetchOHLCV(symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
-        const ohlcv = (await new Promise((resolve, reject) => {
-            await this.loadMarkets();
-            const market = this.market(symbol);
-            const request = {                
+        await this.loadMarkets();
+        const market = this.market(symbol);
+
+        const ohlcv = (await new Promise(async (resolve, reject) => {
+            const request = {
             };
 
             if (limit !== undefined && since !== undefined) {
-                request['from'] = parseInt (since / 1000);
-                request['to'] = this.sum (request['from'], limit * this.parseTimeframe (timeframe));
+                request['from'] = parseInt(since / 1000);
+                request['to'] = this.sum(request['from'], limit * this.parseTimeframe(timeframe));
             } else if (since !== undefined) {
-                request['from'] = parseInt (since / 1000);
-                request['to'] = this.sum (this.seconds (), 1);
+                request['from'] = parseInt(since / 1000);
+                request['to'] = this.sum(this.seconds(), 1);
             } else if (limit !== undefined) {
-                request['to'] = this.seconds ();
-                request['from'] = request['to'] - (limit * this.parseTimeframe (timeframe));
+                request['to'] = this.seconds();
+                request['from'] = request['to'] - (limit * this.parseTimeframe(timeframe));
             }
 
             const pairsPy = new PythonShell(path.join(__dirname, 'python/load-ohlcv.py'), { args: [market.id, this.timeframes[timeframe], request['from'].toString(), request['to'].toString()] });
