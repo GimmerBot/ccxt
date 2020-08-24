@@ -524,6 +524,7 @@ declare module 'ccxt' {
     export class luno extends Exchange {}
     export class lykke extends Exchange {}
     export class mercado extends Exchange {}
+    export class metatrader5 extends Exchange {}
     export class mixcoins extends Exchange {}
     export class oceanex extends Exchange {}
     export class okcoin extends okex3 {}
