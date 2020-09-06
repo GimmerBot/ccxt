@@ -4,6 +4,10 @@
 
 const Exchange = require('./base/Exchange');
 const { ExchangeError } = require('./base/errors');
+const { PythonShell } = require('python-shell');
+const path = require('path');
+const moment = require('moment');
+const { asEnumerable } = require('linq-es2015');
 
 //  ---------------------------------------------------------------------------
 
@@ -102,20 +106,25 @@ module.exports = class metatrader5 extends Exchange {
                 // received a message sent from the Python script (a simple "print" statement)
                 const pairsSource = JSON.parse(message);
 
-                const pairs = asEnumerable(pairsSource).Where(c => c[3]).Select((p, i) => {
-                    return {
-                        symbol: p[85] + "/" + p[86],
-                        base: p[85],
-                        quote: p[86],
-                        id: p[85] + p[86],
-                        baseId: p[85],
-                        quoteId: p[86],
-                        active: true,
-                        info: p
-                    }
-                }).ToArray();
+                try {
+                    const pairs = asEnumerable(pairsSource).Where(c => c[3] && c[85] != c[86]).Select((p, i) => {
+                        return {
+                            symbol: p[85] + "/" + p[86],
+                            base: p[85],
+                            quote: p[86],
+                            id: p[85] + p[86],
+                            baseId: p[85],
+                            quoteId: p[86],
+                            active: true,
+                            info: p
+                        }
+                    }).ToArray();
 
-                resolve(pairs);
+                    resolve(pairs);
+                } catch (error) {
+                    console.error(error);
+                    resolve([]);
+                }
             });
         }));
         return result;
@@ -130,14 +139,14 @@ module.exports = class metatrader5 extends Exchange {
             };
 
             if (limit !== undefined && since !== undefined) {
-                request['from'] = parseInt(since / 1000);
-                request['to'] = this.sum(request['from'], limit * this.parseTimeframe(timeframe));
+                request['from'] = parseInt(since);
+                request['to'] = this.sum(request['from'], limit * this.parseTimeframe(timeframe) * 1000);
             } else if (since !== undefined) {
-                request['from'] = parseInt(since / 1000);
-                request['to'] = this.sum(this.seconds(), 1);
+                request['from'] = parseInt(since);
+                request['to'] = this.sum(this.seconds(), 1) * 1000;
             } else if (limit !== undefined) {
-                request['to'] = this.seconds();
-                request['from'] = request['to'] - (limit * this.parseTimeframe(timeframe));
+                request['to'] = this.seconds() * 1000;
+                request['from'] = request['to'] - (limit * this.parseTimeframe(timeframe) * 1000);
             }
 
             const pairsPy = new PythonShell(path.join(__dirname, 'metatrader5/load-ohlcv.py'), { args: [market.id, this.timeframes[timeframe], request['from'].toString(), request['to'].toString()] });
