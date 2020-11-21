@@ -526,6 +526,7 @@ declare module 'ccxt' {
     export class mercado extends Exchange {}
     export class metatrader5 extends Exchange {}
     export class mixcoins extends Exchange {}
+    export class nominex extends Exchange {}
     export class oceanex extends Exchange {}
     export class okcoin extends okex3 {}
     export class okcoinusd extends okcoin {}
