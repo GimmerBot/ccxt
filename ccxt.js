@@ -141,6 +141,7 @@ const exchanges = {
     'mercado':                 require ('./js/mercado.js'),
     'metatrader5':             require ('./js/metatrader5.js'),
     'mixcoins':                require ('./js/mixcoins.js'),
+    'nominex':                 require ('./js/nominex.js'),    
     'oceanex':                 require ('./js/oceanex.js'),
     'okcoin':                  require ('./js/okcoin.js'),
     'okcoinusd':               require ('./js/okcoinusd.js'),
